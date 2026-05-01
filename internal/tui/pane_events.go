@@ -123,6 +123,18 @@ func (e *eventsModel) markedCount() int {
 	return len(e.marked)
 }
 
+func (e *eventsModel) markAllVisible() {
+	for _, ev := range e.events {
+		e.marked[ev.ID] = struct{}{}
+		e.markedEvents[ev.ID] = ev
+	}
+}
+
+func (e *eventsModel) unmarkAll() {
+	e.marked = map[int64]struct{}{}
+	e.markedEvents = map[int64]model.Event{}
+}
+
 func (e *eventsModel) halfPageUp(viewH int) {
 	e.cursor = max(e.cursor-viewH/2, 0)
 	e.autoFollow = false

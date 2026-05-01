@@ -683,3 +683,35 @@ func TestToggleMark_EmptyEvents(t *testing.T) {
 		t.Fatalf("markedCount: got %d, want 0", e.markedCount())
 	}
 }
+
+func TestMarkAllVisible_MarksEverythingLoaded(t *testing.T) {
+	e := newEvents()
+	e.setEvents(makeEvents(7), 7, 0)
+
+	e.markAllVisible()
+
+	if e.markedCount() != 7 {
+		t.Fatalf("markedCount: got %d, want 7", e.markedCount())
+	}
+	for i := int64(0); i < 7; i++ {
+		if !e.isMarked(i) {
+			t.Fatalf("event %d should be marked", i)
+		}
+	}
+}
+
+func TestUnmarkAll_ClearsBothMaps(t *testing.T) {
+	e := newEvents()
+	e.setEvents(makeEvents(5), 5, 0)
+	e.markAllVisible()
+
+	e.unmarkAll()
+
+	if e.markedCount() != 0 {
+		t.Fatalf("markedCount: got %d, want 0", e.markedCount())
+	}
+	if len(e.markedEvents) != 0 {
+		t.Fatalf("markedEvents map not cleared: len=%d",
+			len(e.markedEvents))
+	}
+}
