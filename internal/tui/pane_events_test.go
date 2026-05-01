@@ -716,6 +716,57 @@ func TestUnmarkAll_ClearsBothMaps(t *testing.T) {
 	}
 }
 
+func TestMarkedSnapshot_OrderedBySlicePosition(t *testing.T) {
+	e := newEvents()
+	e.setEvents(makeEvents(5), 5, 0)
+
+	// Mark in scrambled order: 4, 1, 2.
+	e.cursor = 4
+	e.toggleMark()
+	e.cursor = 1
+	e.toggleMark()
+	e.cursor = 2
+	e.toggleMark()
+
+	got := e.markedSnapshot()
+	if len(got) != 3 {
+		t.Fatalf("len: got %d, want 3", len(got))
+	}
+	wantIDs := []int64{1, 2, 4}
+	for i, w := range wantIDs {
+		if got[i].ID != w {
+			t.Fatalf("got[%d].ID = %d, want %d", i, got[i].ID, w)
+		}
+	}
+}
+
+func TestMarkedSnapshot_IncludesEventsNotInSlice(t *testing.T) {
+	e := newEvents()
+	e.setEvents(makeEvents(5), 5, 0)
+
+	e.cursor = 2
+	e.toggleMark() // marks event 2
+
+	// Filter out event 2.
+	filtered := []model.Event{
+		{ID: 0, Subtype: "PreToolUse"},
+		{ID: 4, Subtype: "PreToolUse"},
+	}
+	e.setEvents(filtered, 2, 0)
+
+	got := e.markedSnapshot()
+	// Event 2 is not in the visible slice but is still marked.
+	// It should appear in the snapshot. Where it appears relative
+	// to the others is implementation-defined; we just assert it's
+	// present and the count matches.
+	if len(got) != 1 {
+		t.Fatalf("len: got %d, want 1", len(got))
+	}
+	if got[0].ID != 2 {
+		t.Fatalf("got[0].ID = %d, want 2", got[0].ID)
+	}
+}
+
 func TestMarksSurvive_SetEventsDoesNotClearMarks(t *testing.T) {
 	e := newEvents()
 	e.setEvents(makeEvents(10), 10, 0)

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -133,6 +134,34 @@ func (e *eventsModel) markAllVisible() {
 func (e *eventsModel) unmarkAll() {
 	e.marked = map[int64]struct{}{}
 	e.markedEvents = map[int64]model.Event{}
+}
+
+// markedSnapshot returns marked events ordered by their position
+// in the currently loaded events slice. Marked events that are not
+// in the slice are appended at the end in ascending ID order.
+func (e *eventsModel) markedSnapshot() []model.Event {
+	if len(e.marked) == 0 {
+		return nil
+	}
+	out := make([]model.Event, 0, len(e.marked))
+	seen := map[int64]bool{}
+	for _, ev := range e.events {
+		if _, ok := e.marked[ev.ID]; ok {
+			out = append(out, ev)
+			seen[ev.ID] = true
+		}
+	}
+	// Append any marked events not in the visible slice.
+	var orphans []model.Event
+	for id, ev := range e.markedEvents {
+		if !seen[id] {
+			orphans = append(orphans, ev)
+		}
+	}
+	sort.Slice(orphans, func(i, j int) bool {
+		return orphans[i].ID < orphans[j].ID
+	})
+	return append(out, orphans...)
 }
 
 func (e *eventsModel) halfPageUp(viewH int) {
