@@ -21,10 +21,17 @@ type eventsModel struct {
 	hScroll      int
 	autoFollow   bool
 	height       int
+
+	marked       map[int64]struct{}
+	markedEvents map[int64]model.Event
 }
 
 func newEvents() eventsModel {
-	return eventsModel{autoFollow: true}
+	return eventsModel{
+		autoFollow:   true,
+		marked:       map[int64]struct{}{},
+		markedEvents: map[int64]model.Event{},
+	}
 }
 
 func (e *eventsModel) setEvents(events []model.Event, rawCount int, offset int) {
@@ -90,6 +97,30 @@ func (e *eventsModel) moveDown() {
 		e.cursor++
 	}
 	e.clampScroll()
+}
+
+func (e *eventsModel) toggleMark() {
+	if e.cursor < 0 || e.cursor >= len(e.events) {
+		return
+	}
+	ev := e.events[e.cursor]
+	if _, ok := e.marked[ev.ID]; ok {
+		delete(e.marked, ev.ID)
+		delete(e.markedEvents, ev.ID)
+	} else {
+		e.marked[ev.ID] = struct{}{}
+		e.markedEvents[ev.ID] = ev
+	}
+	e.moveDown()
+}
+
+func (e *eventsModel) isMarked(id int64) bool {
+	_, ok := e.marked[id]
+	return ok
+}
+
+func (e *eventsModel) markedCount() int {
+	return len(e.marked)
 }
 
 func (e *eventsModel) halfPageUp(viewH int) {

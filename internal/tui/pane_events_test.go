@@ -619,3 +619,67 @@ func TestEventsViewUsesScrollWindow(t *testing.T) {
 		}
 	}
 }
+
+func TestToggleMark_MarksAndAdvances(t *testing.T) {
+	e := newEvents()
+	e.setEvents(makeEvents(5), 5, 0)
+	e.autoFollow = false
+	e.cursor = 0
+
+	e.toggleMark()
+
+	if !e.isMarked(0) {
+		t.Fatalf("event 0 should be marked")
+	}
+	if e.cursor != 1 {
+		t.Fatalf("cursor: got %d, want 1", e.cursor)
+	}
+	if e.markedCount() != 1 {
+		t.Fatalf("markedCount: got %d, want 1", e.markedCount())
+	}
+}
+
+func TestToggleMark_TogglesOff(t *testing.T) {
+	e := newEvents()
+	e.setEvents(makeEvents(5), 5, 0)
+	e.autoFollow = false
+	e.cursor = 2
+
+	e.toggleMark()
+	// cursor is now at 3; go back and unmark
+	e.cursor = 2
+	e.toggleMark()
+
+	if e.isMarked(2) {
+		t.Fatalf("event 2 should be unmarked after second toggle")
+	}
+	if e.markedCount() != 0 {
+		t.Fatalf("markedCount: got %d, want 0", e.markedCount())
+	}
+}
+
+func TestToggleMark_AtEnd(t *testing.T) {
+	e := newEvents()
+	e.setEvents(makeEvents(3), 3, 0)
+	e.autoFollow = false
+	e.cursor = 2
+
+	e.toggleMark()
+
+	if !e.isMarked(2) {
+		t.Fatal("last event should be marked")
+	}
+	if e.cursor != 2 {
+		t.Fatalf("cursor should clamp at end: got %d, want 2", e.cursor)
+	}
+}
+
+func TestToggleMark_EmptyEvents(t *testing.T) {
+	e := newEvents()
+
+	e.toggleMark()
+
+	if e.markedCount() != 0 {
+		t.Fatalf("markedCount: got %d, want 0", e.markedCount())
+	}
+}
