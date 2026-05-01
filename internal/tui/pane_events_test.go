@@ -581,6 +581,36 @@ func TestRenderEventLineIncludesBriefText(t *testing.T) {
 	}
 }
 
+func TestRenderEventLine_MarkedShowsArrow(t *testing.T) {
+	e := newEvents()
+	e.setEvents(makeEvents(3), 3, 0)
+	e.cursor = 1
+	e.toggleMark() // marks event 1
+
+	ev := e.events[1]
+	line := stripANSI(e.renderEventLine(ev, 1, false, false, nil, 1))
+
+	if !strings.HasPrefix(line, "> ") {
+		t.Fatalf("marked line should start with %q, got %q", "> ", line)
+	}
+}
+
+func TestRenderEventLine_UnmarkedShowsSpaces(t *testing.T) {
+	e := newEvents()
+	e.setEvents(makeEvents(3), 3, 0)
+
+	ev := e.events[0]
+	line := stripANSI(e.renderEventLine(ev, 0, false, false, nil, 1))
+
+	if !strings.HasPrefix(line, "  ") {
+		t.Fatalf("unmarked line should start with two spaces, got %q",
+			line)
+	}
+	if strings.HasPrefix(line, "> ") {
+		t.Fatalf("unmarked line must not start with arrow")
+	}
+}
+
 func TestEventsViewShowsRawCountAndAutoHeader(t *testing.T) {
 	e := newEvents()
 	e.rawCount = 10

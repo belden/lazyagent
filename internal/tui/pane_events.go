@@ -258,10 +258,20 @@ func (e *eventsModel) renderEventLine(ev model.Event, index int, atCursor bool, 
 	subtype := truncate(orDefault(ev.Subtype, ev.Type), 20)
 	agentLabel, agentInfo := eventAgentLabel(ev, agentMap)
 	brief := eventview.Brief(ev)
+	marked := e.isMarked(ev.ID)
 	if atCursor {
-		return renderSelectedEventLine(ev, focused, numStr, agentLabel, subtype, brief)
+		return renderSelectedEventLine(ev, focused, numStr,
+			agentLabel, subtype, brief, marked)
 	}
-	return renderPlainEventLine(ev, numStr, subtype, agentLabel, agentInfo, brief)
+	return renderPlainEventLine(ev, numStr, subtype, agentLabel,
+		agentInfo, brief, marked)
+}
+
+func markPrefix(marked bool) string {
+	if marked {
+		return "> "
+	}
+	return "  "
 }
 
 func eventAgentLabel(ev model.Event, agentMap map[string]agentInfo) (string, agentInfo) {
@@ -287,16 +297,16 @@ func eventLineParts(numStr, agentLabel, subtype, toolName, brief string) []strin
 	return parts
 }
 
-func renderSelectedEventLine(ev model.Event, focused bool, numStr, agentLabel, subtype, brief string) string {
+func renderSelectedEventLine(ev model.Event, focused bool, numStr, agentLabel, subtype, brief string, marked bool) string {
 	parts := eventLineParts(numStr, agentLabel, subtype, ev.ToolName, brief)
 	style := selectedStyle
 	if focused {
 		style = cursorStyle
 	}
-	return style.Render("  " + strings.Join(parts, "  "))
+	return style.Render(markPrefix(marked) + strings.Join(parts, "  "))
 }
 
-func renderPlainEventLine(ev model.Event, numStr, subtype, agentLabel string, info agentInfo, brief string) string {
+func renderPlainEventLine(ev model.Event, numStr, subtype, agentLabel string, info agentInfo, brief string, marked bool) string {
 
 	stColor := subtypeColor(ev.Subtype)
 	subtypeStr := lipgloss.NewStyle().Foreground(stColor).Render(subtype)
@@ -319,5 +329,5 @@ func renderPlainEventLine(ev model.Event, numStr, subtype, agentLabel string, in
 		}
 	}
 
-	return "  " + strings.Join(parts, "  ")
+	return markPrefix(marked) + strings.Join(parts, "  ")
 }
