@@ -22,6 +22,10 @@ type keyMap struct {
 	TokenUsage   key.Binding
 	Help         key.Binding
 	Quit         key.Binding
+	MarkToggle   key.Binding
+	MarkAll      key.Binding
+	UnmarkAll    key.Binding
+	ExportMarked key.Binding
 }
 
 func defaultKeyMap() keyMap {
@@ -45,6 +49,10 @@ func defaultKeyMap() keyMap {
 		TokenUsage:   key.NewBinding(key.WithKeys("b"), key.WithHelp("b", "token usage")),
 		Help:         key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
 		Quit:         key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
+		MarkToggle:   key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "mark toggle")),
+		MarkAll:      key.NewBinding(key.WithKeys("M"), key.WithHelp("M", "mark all")),
+		UnmarkAll:    key.NewBinding(key.WithKeys("U"), key.WithHelp("U", "unmark all")),
+		ExportMarked: key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "export marked")),
 	}
 }
 
@@ -56,5 +64,6 @@ func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.NextPane, k.PrevPane, k.PaneProjects, k.PaneSession, k.PaneAgents, k.PaneEvents, k.PaneDetail},
 		{k.Search, k.CycleType, k.ToggleAuto, k.AgentAll, k.TokenUsage, k.Refresh, k.Quit},
+		{k.MarkToggle, k.MarkAll, k.UnmarkAll, k.ExportMarked},
 	}
 }

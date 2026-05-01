@@ -525,6 +525,18 @@ func (m Model) updateEvents(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.setFocus(focusDetail)
 		m.lastKey = k
 		return m, nil
+	case "m":
+		m.events.toggleMark()
+		m.lastKey = k
+		return m, m.syncEventSelectionAndMaybeLoadOlder()
+	case "M":
+		m.events.markAllVisible()
+		m.lastKey = k
+		return m, nil
+	case "U":
+		m.events.unmarkAll()
+		m.lastKey = k
+		return m, nil
 	}
 	m.lastKey = k
 	return m, m.syncEventSelectionAndMaybeLoadOlder()

@@ -467,6 +467,36 @@ func TestUpdateEventsHorizontalScrollPreservesSyncPath(t *testing.T) {
 	}
 }
 
+func TestMarkKeybindings_RouteWhenEventsFocused(t *testing.T) {
+	m := newModel(nil, time.Second)
+	m.focus = focusEvents
+	m.events.setEvents([]model.Event{
+		{ID: 1, Subtype: "PreToolUse"},
+		{ID: 2, Subtype: "PreToolUse"},
+		{ID: 3, Subtype: "PreToolUse"},
+	}, 3, 0)
+	m.events.autoFollow = false
+	m.events.cursor = 0
+
+	updated, _ := m.Update(testKey("m"))
+	m = updated.(Model)
+	if !m.events.isMarked(1) {
+		t.Fatalf("m should mark event with ID 1")
+	}
+
+	updated, _ = m.Update(testKey("M"))
+	m = updated.(Model)
+	if m.events.markedCount() != 3 {
+		t.Fatalf("M should mark all 3 events, got %d", m.events.markedCount())
+	}
+
+	updated, _ = m.Update(testKey("U"))
+	m = updated.(Model)
+	if m.events.markedCount() != 0 {
+		t.Fatalf("U should unmark all, got %d", m.events.markedCount())
+	}
+}
+
 func TestUpdateEventsEnterStillFocusesDetail(t *testing.T) {
 	m := newModel(nil, time.Second)
 	m.focus = focusEvents
