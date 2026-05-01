@@ -715,3 +715,28 @@ func TestUnmarkAll_ClearsBothMaps(t *testing.T) {
 			len(e.markedEvents))
 	}
 }
+
+func TestMarksSurvive_SetEventsDoesNotClearMarks(t *testing.T) {
+	e := newEvents()
+	e.setEvents(makeEvents(10), 10, 0)
+	e.cursor = 3
+	e.toggleMark() // marks event 3
+
+	// Simulate a filter change that removes event 3 from view.
+	filtered := []model.Event{
+		{ID: 1, Subtype: "PreToolUse"},
+		{ID: 5, Subtype: "PreToolUse"},
+		{ID: 7, Subtype: "PreToolUse"},
+	}
+	e.setEvents(filtered, 3, 0)
+
+	if !e.isMarked(3) {
+		t.Fatalf("mark should survive filter change")
+	}
+	if _, ok := e.markedEvents[3]; !ok {
+		t.Fatalf("markedEvents cache should still hold event 3")
+	}
+	if e.markedCount() != 1 {
+		t.Fatalf("markedCount: got %d, want 1", e.markedCount())
+	}
+}
