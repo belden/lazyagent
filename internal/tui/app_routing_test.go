@@ -2,6 +2,7 @@ package tui
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -494,6 +495,29 @@ func TestMarkKeybindings_RouteWhenEventsFocused(t *testing.T) {
 	m = updated.(Model)
 	if m.events.markedCount() != 0 {
 		t.Fatalf("U should unmark all, got %d", m.events.markedCount())
+	}
+}
+
+func TestExportWithNoMarks_ShowsStatusOnly(t *testing.T) {
+	m := newModel(nil, time.Second)
+	m.focus = focusEvents
+	m.events.setEvents([]model.Event{
+		{ID: 1, Subtype: "PreToolUse"},
+	}, 1, 0)
+	m.events.autoFollow = false
+
+	if m.events.markedCount() != 0 {
+		t.Fatalf("precondition: no marks")
+	}
+
+	updated, _ := m.Update(testKey("x"))
+	m = updated.(Model)
+
+	if m.status == "" {
+		t.Fatalf("status should be set")
+	}
+	if !strings.Contains(m.status, "no events marked") {
+		t.Fatalf("status: got %q, want contains %q", m.status, "no events marked")
 	}
 }
 

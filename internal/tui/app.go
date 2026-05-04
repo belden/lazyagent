@@ -537,6 +537,15 @@ func (m Model) updateEvents(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.events.unmarkAll()
 		m.lastKey = k
 		return m, nil
+	case "x":
+		if m.events.markedCount() == 0 {
+			m.status = "no events marked — press m to mark events"
+			m.lastKey = k
+			return m, nil
+		}
+		// Popup wiring arrives in Task 9.
+		m.lastKey = k
+		return m, nil
 	}
 	m.lastKey = k
 	return m, m.syncEventSelectionAndMaybeLoadOlder()
