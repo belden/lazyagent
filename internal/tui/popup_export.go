@@ -6,7 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"charm.land/bubbles/v2/textinput"
 	"github.com/chojs23/lazyagent/internal/model"
 )
 
@@ -58,6 +60,97 @@ func parsePayload(payload string) any {
 		return nil
 	}
 	return v
+}
+
+type exportPopup struct {
+	active      bool
+	input       textinput.Model
+	focusIdx    int
+	fileExists  bool
+	overwriteOK bool
+	err         string
+}
+
+const (
+	exportFocusInput = iota
+	exportFocusOverwrite
+	exportFocusConfirm
+	exportFocusCancel
+)
+
+func newExportPopup() exportPopup {
+	ti := textinput.New()
+	ti.Prompt = ""
+	ti.CharLimit = 4096
+	return exportPopup{input: ti}
+}
+
+func (p *exportPopup) open() {
+	p.active = true
+	p.focusIdx = exportFocusInput
+	p.fileExists = false
+	p.overwriteOK = false
+	p.err = ""
+	p.input.SetValue(defaultExportFilename(time.Now()))
+	p.input.Focus()
+}
+
+func (p *exportPopup) cancel() {
+	p.active = false
+	p.input.SetValue("")
+	p.input.Blur()
+}
+
+func (p *exportPopup) filename() string {
+	return p.input.Value()
+}
+
+func (p *exportPopup) setFilename(s string) {
+	p.input.SetValue(s)
+	p.refreshFileExists()
+}
+
+func (p *exportPopup) refreshFileExists() {
+	path := strings.TrimSpace(expandHome(p.filename()))
+	if path == "" {
+		p.fileExists = false
+		p.overwriteOK = false
+		return
+	}
+	info, err := os.Stat(path)
+	exists := err == nil && !info.IsDir()
+	if exists != p.fileExists {
+		p.overwriteOK = false
+	}
+	p.fileExists = exists
+}
+
+func (p *exportPopup) canConfirm() bool {
+	if strings.TrimSpace(p.filename()) == "" {
+		return false
+	}
+	if p.fileExists && !p.overwriteOK {
+		return false
+	}
+	return true
+}
+
+func (p *exportPopup) confirm(events []model.Event) error {
+	if !p.canConfirm() {
+		return fmt.Errorf("confirm not allowed in current state")
+	}
+	path := strings.TrimSpace(expandHome(p.filename()))
+	if err := writeExport(path, events); err != nil {
+		p.err = err.Error()
+		return err
+	}
+	p.active = false
+	p.input.Blur()
+	return nil
+}
+
+func defaultExportFilename(now time.Time) string {
+	return fmt.Sprintf("lazyagent-events-%s.json", now.Format("2006-01-02-1504"))
 }
 
 // expandHome replaces a leading ~ with the user's home directory.
