@@ -69,6 +69,10 @@ function renderExportSlot() {
   // Filled in by Task 7. Stub keeps clearMarks runnable in the meantime.
 }
 
+function onMarkClick(_e, _id) {
+  // Filled in by Task 6.
+}
+
 const REFRESH_MS = 2000;
 
 const els = {
@@ -446,6 +450,8 @@ function renderEvents() {
     const li = document.createElement("li");
     li.dataset.id = ev.id;
     if (ev.id === state.eventId) li.classList.add("selected");
+    const isMarked = marks.has(ev.id);
+    if (isMarked) li.classList.add("marked");
     const cls = eventTypeClass(ev);
     const brief = ev.brief || "";
     const briefCls = "ev-brief" + (ev.highlighted ? " bright" : "");
@@ -454,12 +460,18 @@ function renderEvents() {
       ? `<span class="ev-agent" style="color:${agent.color}" title="${escapeHTML(agent.title)}">${escapeHTML(agent.label)}</span>`
       : `<span class="ev-agent ev-agent-empty"></span>`;
     li.innerHTML = `
+      <input type="checkbox" class="event-mark" data-event-id="${ev.id}"${isMarked ? " checked" : ""}>
       <span class="ev-type ${cls}">${escapeHTML(ev.subtype || ev.type)}</span>
       ${agentSpan}
       <span class="ev-tool">${escapeHTML(ev.tool_name || "")}</span>
       <span class="${briefCls}">${escapeHTML(brief)}</span>
       <span class="ev-time">${fmtTime(ev.timestamp)}</span>
     `;
+    const checkbox = li.querySelector(".event-mark");
+    checkbox.addEventListener("click", (e) => {
+      e.stopPropagation();
+      onMarkClick(e, ev.id);
+    });
     li.addEventListener("click", () => selectEvent(ev.id));
     els.eventList.appendChild(li);
   });
