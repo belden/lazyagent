@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/chojs23/lazyagent/internal/model"
 )
 
@@ -203,6 +204,92 @@ func TestExportPopup_OverwriteRequiredForExistingFile(t *testing.T) {
 	p.overwriteOK = true
 	if !p.canConfirm() {
 		t.Fatal("confirm should be enabled once overwrite is OK")
+	}
+}
+
+func TestExportPopup_EscCancels(t *testing.T) {
+	p := newExportPopup()
+	p.open()
+
+	p.handleKey(tea.KeyPressMsg(tea.Key{Code: tea.KeyEscape}), nil)
+	if p.active {
+		t.Fatal("popup should close on esc")
+	}
+}
+
+func TestExportPopup_TabCyclesFocus(t *testing.T) {
+	p := newExportPopup()
+	p.open()
+	p.setFilename("/tmp/lazyagent-test-no-such-file.json")
+
+	if p.focusIdx != exportFocusInput {
+		t.Fatalf("initial focus: got %d, want input", p.focusIdx)
+	}
+	p.handleKey(tea.KeyPressMsg(tea.Key{Code: tea.KeyTab}), nil)
+	if p.focusIdx != exportFocusConfirm {
+		t.Fatalf("after tab: got %d, want confirm", p.focusIdx)
+	}
+	p.handleKey(tea.KeyPressMsg(tea.Key{Code: tea.KeyTab}), nil)
+	if p.focusIdx != exportFocusCancel {
+		t.Fatalf("after tab tab: got %d, want cancel", p.focusIdx)
+	}
+	p.handleKey(tea.KeyPressMsg(tea.Key{Code: tea.KeyTab}), nil)
+	if p.focusIdx != exportFocusInput {
+		t.Fatalf("after wrap: got %d, want input", p.focusIdx)
+	}
+}
+
+func TestExportPopup_TabIncludesOverwriteWhenFileExists(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "exists.json")
+	os.WriteFile(path, []byte("[]"), 0644)
+
+	p := newExportPopup()
+	p.open()
+	p.setFilename(path)
+
+	p.handleKey(tea.KeyPressMsg(tea.Key{Code: tea.KeyTab}), nil)
+	if p.focusIdx != exportFocusOverwrite {
+		t.Fatalf("after tab: got %d, want overwrite", p.focusIdx)
+	}
+}
+
+func TestExportPopup_EnterOnInputConfirmsWhenAllowed(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "out.json")
+
+	p := newExportPopup()
+	p.open()
+	p.setFilename(path)
+	events := []model.Event{{ID: 1, Payload: `{"k":1}`}}
+
+	p.handleKey(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}), events)
+
+	if p.active {
+		t.Fatal("popup should close on enter when confirm is allowed")
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("file not written: %v", err)
+	}
+}
+
+func TestExportPopup_SpaceTogglesOverwriteWhenFocused(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "exists.json")
+	os.WriteFile(path, []byte("[]"), 0644)
+
+	p := newExportPopup()
+	p.open()
+	p.setFilename(path)
+	p.focusIdx = exportFocusOverwrite
+
+	p.handleKey(tea.KeyPressMsg(tea.Key{Code: tea.KeySpace}), nil)
+	if !p.overwriteOK {
+		t.Fatal("space should toggle overwriteOK on")
+	}
+	p.handleKey(tea.KeyPressMsg(tea.Key{Code: tea.KeySpace}), nil)
+	if p.overwriteOK {
+		t.Fatal("space again should toggle overwriteOK off")
 	}
 }
 

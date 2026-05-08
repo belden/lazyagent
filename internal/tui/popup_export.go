@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
 	"github.com/chojs23/lazyagent/internal/model"
 )
 
@@ -147,6 +148,79 @@ func (p *exportPopup) confirm(events []model.Event) error {
 	p.active = false
 	p.input.Blur()
 	return nil
+}
+
+// handleKey processes a key event when the popup is active. The
+// events slice is needed only for confirm; pass nil when not
+// applicable. Returns a tea.Cmd that may forward textinput updates.
+func (p *exportPopup) handleKey(msg tea.KeyMsg, events []model.Event) tea.Cmd {
+	if !p.active {
+		return nil
+	}
+
+	code := msg.Key().Code
+	mod := msg.Key().Mod
+
+	switch code {
+	case tea.KeyEscape:
+		p.cancel()
+		return nil
+
+	case tea.KeyEnter:
+		switch p.focusIdx {
+		case exportFocusInput, exportFocusConfirm:
+			if p.canConfirm() {
+				_ = p.confirm(events)
+			}
+		case exportFocusCancel:
+			p.cancel()
+		case exportFocusOverwrite:
+			p.overwriteOK = !p.overwriteOK
+		}
+		return nil
+
+	case tea.KeyTab:
+		if mod&tea.ModShift != 0 {
+			p.advanceFocus(-1)
+		} else {
+			p.advanceFocus(+1)
+		}
+		return nil
+	}
+
+	if code == tea.KeySpace && p.focusIdx == exportFocusOverwrite {
+		p.overwriteOK = !p.overwriteOK
+		return nil
+	}
+
+	if p.focusIdx == exportFocusInput {
+		var cmd tea.Cmd
+		p.input, cmd = p.input.Update(msg)
+		p.refreshFileExists()
+		return cmd
+	}
+	return nil
+}
+
+func (p *exportPopup) advanceFocus(delta int) {
+	order := []int{exportFocusInput, exportFocusConfirm, exportFocusCancel}
+	if p.fileExists {
+		order = []int{exportFocusInput, exportFocusOverwrite, exportFocusConfirm, exportFocusCancel}
+	}
+	pos := 0
+	for i, f := range order {
+		if f == p.focusIdx {
+			pos = i
+			break
+		}
+	}
+	pos = (pos + delta + len(order)) % len(order)
+	p.focusIdx = order[pos]
+	if p.focusIdx == exportFocusInput {
+		p.input.Focus()
+	} else {
+		p.input.Blur()
+	}
 }
 
 func defaultExportFilename(now time.Time) string {
