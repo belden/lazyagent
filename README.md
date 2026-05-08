@@ -215,6 +215,10 @@ Main keys:
 - `d` deletes the selected project or session from the projects pane
 - `D` clears events for the selected session tree
 - `F` toggles auto follow in the events pane
+- `m` toggles the mark on the event under the cursor and advances
+- `M` marks all visible events
+- `U` clears all marks
+- `x` exports marked events as JSON
 - `r` refreshes data
 - `?` toggles help
 - `q` quits
