@@ -293,6 +293,49 @@ func TestExportPopup_SpaceTogglesOverwriteWhenFocused(t *testing.T) {
 	}
 }
 
+func TestExportPopup_RenderShowsFilename(t *testing.T) {
+	p := newExportPopup()
+	p.open()
+	p.setFilename("/tmp/foo.json")
+
+	out := stripANSI(p.view(80))
+	if !strings.Contains(out, "/tmp/foo.json") {
+		t.Fatalf("view missing filename: %q", out)
+	}
+	if !strings.Contains(out, "confirm") {
+		t.Fatalf("view missing confirm button: %q", out)
+	}
+	if !strings.Contains(out, "cancel") {
+		t.Fatalf("view missing cancel button: %q", out)
+	}
+}
+
+func TestExportPopup_RenderShowsOverwriteRowWhenFileExists(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "exists.json")
+	os.WriteFile(path, []byte("[]"), 0644)
+
+	p := newExportPopup()
+	p.open()
+	p.setFilename(path)
+
+	out := stripANSI(p.view(80))
+	if !strings.Contains(out, "File exists") {
+		t.Fatalf("view missing overwrite warning: %q", out)
+	}
+}
+
+func TestExportPopup_RenderHidesOverwriteRowWhenFileMissing(t *testing.T) {
+	p := newExportPopup()
+	p.open()
+	p.setFilename("/tmp/lazyagent-no-such-file.json")
+
+	out := stripANSI(p.view(80))
+	if strings.Contains(out, "File exists") {
+		t.Fatalf("view should not show overwrite row: %q", out)
+	}
+}
+
 func TestExpandHome(t *testing.T) {
 	home, _ := os.UserHomeDir()
 	cases := []struct{ in, want string }{

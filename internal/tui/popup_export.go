@@ -10,6 +10,7 @@ import (
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/chojs23/lazyagent/internal/model"
 )
 
@@ -221,6 +222,76 @@ func (p *exportPopup) advanceFocus(delta int) {
 	} else {
 		p.input.Blur()
 	}
+}
+
+func (p *exportPopup) view(maxWidth int) string {
+	if !p.active {
+		return ""
+	}
+
+	width := min(max(maxWidth-20, 50), 80)
+
+	label := lipgloss.NewStyle().Foreground(colorGray).
+		Render("choose export filename: ")
+	inputView := p.input.View()
+	inputRow := label + inputView
+
+	var rows []string
+	rows = append(rows, inputRow)
+
+	if p.fileExists {
+		rows = append(rows, "")
+		rows = append(rows, p.overwriteRow())
+	}
+
+	rows = append(rows, "")
+	rows = append(rows, p.buttonRow())
+
+	if p.err != "" {
+		rows = append(rows, "")
+		rows = append(rows, lipgloss.NewStyle().
+			Foreground(colorRed).Render(p.err))
+	}
+
+	body := strings.Join(rows, "\n")
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(colorWhite).
+		Padding(1, 2).
+		Width(width).
+		Render(body)
+}
+
+func (p *exportPopup) overwriteRow() string {
+	check := "[ ] yes"
+	if p.overwriteOK {
+		check = "[x] yes"
+	}
+	row := "File exists, overwrite? " + check
+	if p.focusIdx == exportFocusOverwrite {
+		return lipgloss.NewStyle().
+			Foreground(colorRed).Bold(true).Render(row)
+	}
+	return lipgloss.NewStyle().Foreground(colorRed).Render(row)
+}
+
+func (p *exportPopup) buttonRow() string {
+	confirmStyle := lipgloss.NewStyle().Padding(0, 1)
+	cancelStyle := confirmStyle
+
+	if !p.canConfirm() {
+		confirmStyle = confirmStyle.Foreground(colorGray)
+	}
+	if p.focusIdx == exportFocusConfirm {
+		confirmStyle = confirmStyle.Reverse(true)
+	}
+	if p.focusIdx == exportFocusCancel {
+		cancelStyle = cancelStyle.Reverse(true)
+	}
+
+	confirm := confirmStyle.Render("[confirm]")
+	cancel := cancelStyle.Render("[cancel]")
+	return confirm + "  " + cancel
 }
 
 func defaultExportFilename(now time.Time) string {
