@@ -66,7 +66,23 @@ function setRowMarkedClass(id, isMarked) {
 }
 
 function renderExportSlot() {
-  // Filled in by Task 7. Stub keeps clearMarks runnable in the meantime.
+  const slot = document.querySelector(".events-head .export");
+  if (!slot) return;
+  if (marks.size === 0) {
+    slot.innerHTML = "";
+    return;
+  }
+  slot.innerHTML = `
+    <span class="mark-count">${marks.size} marked</span>
+    <button class="export-btn" type="button">export</button>
+    <button class="clear-btn" type="button">clear</button>
+  `;
+  slot.querySelector(".export-btn").addEventListener("click", exportMarks);
+  slot.querySelector(".clear-btn").addEventListener("click", clearMarks);
+}
+
+function exportMarks() {
+  // Filled in by Task 8.
 }
 
 function onMarkClick(ev, id) {
@@ -516,6 +532,7 @@ function renderEvents() {
     li.addEventListener("click", () => selectEvent(ev.id));
     els.eventList.appendChild(li);
   });
+  renderExportSlot();
 }
 
 // Stable color palette for subagent labels — mirrors how the TUI colors
