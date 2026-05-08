@@ -255,6 +255,10 @@ The `--web` flag is read-only by design: ingestion is still handled by the runti
 
 Project grouping is automatic. `lazyagent` first tries to match sessions by working directory such as `cwd` or `project_dir`, then falls back to transcript path information when needed. That means Claude, Codex, and OpenCode sessions from the same worktree are usually grouped under the same project.
 
+### Marking and exporting events
+
+Each event row in the web UI has a checkbox in the leftmost column. Click to mark a row; shift-click to mark a contiguous range — the new state matches the shift-clicked checkbox, Gmail-style. Once at least one row is marked, an `[export]` button appears in the events header alongside a `[clear]` button and a count of marked rows. `[export]` downloads a JSON array of the marked events' raw payloads as `lazyagent-events-YYYY-MM-DD-HHMM.json`; `[clear]` empties the marks. Switching sessions clears marks. Marks are in-memory only — a page reload loses them, matching the TUI.
+
 ### Filtering and search
 
 - **Type filter** -- Press `t` to cycle through: All, User, Message, Code, System, Tool, Session.
