@@ -521,6 +521,46 @@ func TestExportWithNoMarks_ShowsStatusOnly(t *testing.T) {
 	}
 }
 
+func TestExportPopup_XOpensWhenMarksExist(t *testing.T) {
+	m := newModel(nil, time.Second)
+	m.focus = focusEvents
+	m.events.setEvents([]model.Event{
+		{ID: 1, Payload: `{"a":1}`},
+		{ID: 2, Payload: `{"b":2}`},
+	}, 2, 0)
+	m.events.autoFollow = false
+	m.events.cursor = 0
+	updated, _ := m.Update(testKey("m"))
+	m = updated.(Model)
+
+	updated, _ = m.Update(testKey("x"))
+	m = updated.(Model)
+
+	if !m.export.active {
+		t.Fatal("popup should be active after x with marks")
+	}
+}
+
+func TestExportPopup_EscClosesPopupAfterOpen(t *testing.T) {
+	m := newModel(nil, time.Second)
+	m.focus = focusEvents
+	m.events.setEvents([]model.Event{
+		{ID: 1, Payload: `{"a":1}`},
+	}, 1, 0)
+	m.events.autoFollow = false
+	updated, _ := m.Update(testKey("m"))
+	m = updated.(Model)
+	updated, _ = m.Update(testKey("x"))
+	m = updated.(Model)
+
+	updated, _ = m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEscape}))
+	m = updated.(Model)
+
+	if m.export.active {
+		t.Fatal("popup should close on esc")
+	}
+}
+
 func TestUpdateEventsEnterStillFocusesDetail(t *testing.T) {
 	m := newModel(nil, time.Second)
 	m.focus = focusEvents

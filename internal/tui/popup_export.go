@@ -71,6 +71,7 @@ type exportPopup struct {
 	fileExists  bool
 	overwriteOK bool
 	err         string
+	confirmed   bool
 }
 
 const (
@@ -93,6 +94,7 @@ func (p *exportPopup) open() {
 	p.fileExists = false
 	p.overwriteOK = false
 	p.err = ""
+	p.confirmed = false
 	p.input.SetValue(defaultExportFilename(time.Now()))
 	p.input.Focus()
 }
@@ -147,6 +149,7 @@ func (p *exportPopup) confirm(events []model.Event) error {
 		return err
 	}
 	p.active = false
+	p.confirmed = true
 	p.input.Blur()
 	return nil
 }

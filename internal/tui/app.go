@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"charm.land/bubbles/v2/help"
@@ -82,6 +83,7 @@ type Model struct {
 	errorOverlay errorOverlay
 	debug        *debugOverlay
 	tokens       tokensOverlay
+	export       exportPopup
 
 	allProjects []model.Project
 	allSessions []model.Session
@@ -108,6 +110,7 @@ func newModel(st *store.Store, refreshInterval time.Duration) Model {
 		focus:           focusProjects,
 		status:          "Loading...",
 		debug:           &debugOverlay{},
+		export:          newExportPopup(),
 	}
 	setGlobalDebug(m.debug)
 	return m
@@ -210,6 +213,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m.handleMouseWheel(msg)
+	}
+
+	if m.export.active {
+		if msg, ok := msg.(tea.KeyMsg); ok {
+			events := m.events.markedSnapshot()
+			cmd := m.export.handleKey(msg, events)
+			if !m.export.active && m.export.confirmed {
+				m.status = fmt.Sprintf(
+					"exported %d events to %s",
+					len(events),
+					strings.TrimSpace(expandHome(m.export.filename())))
+				m.export.confirmed = false
+			}
+			return m, cmd
+		}
+		if click, ok := msg.(tea.MouseClickMsg); ok {
+			// Mouse handling deferred to Task 13.
+			_ = click
+			return m, nil
+		}
+		return m, nil
 	}
 
 	// While the search input is focused, route remaining messages
@@ -543,7 +567,7 @@ func (m Model) updateEvents(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.lastKey = k
 			return m, nil
 		}
-		// Popup wiring arrives in Task 9.
+		m.export.open()
 		m.lastKey = k
 		return m, nil
 	}
@@ -941,6 +965,9 @@ func (m Model) View() tea.View {
 	}
 	if m.tokens.visible {
 		full = renderOverlayCentered(full, m.width, m.height, m.tokens.viewFullScreen(m.width, m.height))
+	}
+	if m.export.active {
+		full = renderOverlayCentered(full, m.width, m.height, m.export.view(m.width))
 	}
 	if lipgloss.Height(full) > m.height {
 		full = lipgloss.NewStyle().MaxHeight(m.height).Render(full)
