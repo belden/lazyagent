@@ -69,8 +69,49 @@ function renderExportSlot() {
   // Filled in by Task 7. Stub keeps clearMarks runnable in the meantime.
 }
 
-function onMarkClick(_e, _id) {
-  // Filled in by Task 6.
+function onMarkClick(ev, id) {
+  // The browser toggles the checkbox before firing this event, so the
+  // checked attribute is already the post-click state.
+  const newState = ev.target.checked;
+
+  if (ev.shiftKey && markAnchor !== null && markAnchor !== id) {
+    const anchorIdx = state.cache.events.findIndex((e) => e.id === markAnchor);
+    const targetIdx = state.cache.events.findIndex((e) => e.id === id);
+    if (anchorIdx !== -1 && targetIdx !== -1) {
+      applyRange(anchorIdx, targetIdx, newState);
+      renderExportSlot();
+      return;
+    }
+    // Anchor is no longer in the loaded window — fall through to plain
+    // click behavior so the user gets predictable results instead of a
+    // silent no-op.
+  }
+
+  if (newState) {
+    marks.add(id);
+  } else {
+    marks.delete(id);
+  }
+  markAnchor = id;
+  setRowMarkedClass(id, newState);
+  renderExportSlot();
+}
+
+function applyRange(aIdx, bIdx, nextState) {
+  const lo = Math.min(aIdx, bIdx);
+  const hi = Math.max(aIdx, bIdx);
+  // Anchor is intentionally untouched; the design preserves it across
+  // shift-clicks so the user can pin a starting point and refine the
+  // range with several shift-clicks.
+  for (let i = lo; i <= hi; i++) {
+    const id = state.cache.events[i].id;
+    if (nextState) {
+      marks.add(id);
+    } else {
+      marks.delete(id);
+    }
+    setRowMarkedClass(id, nextState);
+  }
 }
 
 const REFRESH_MS = 2000;
