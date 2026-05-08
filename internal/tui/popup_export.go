@@ -297,6 +297,100 @@ func (p *exportPopup) buttonRow() string {
 	return confirm + "  " + cancel
 }
 
+type popupHit int
+
+const (
+	hitNone popupHit = iota
+	hitInput
+	hitOverwrite
+	hitConfirm
+	hitCancel
+)
+
+func (p *exportPopup) handleClick(hit popupHit, events []model.Event) {
+	if !p.active {
+		return
+	}
+	switch hit {
+	case hitInput:
+		p.focusIdx = exportFocusInput
+		p.input.Focus()
+	case hitOverwrite:
+		if p.fileExists {
+			if p.focusIdx == exportFocusOverwrite {
+				p.overwriteOK = !p.overwriteOK
+			} else {
+				p.focusIdx = exportFocusOverwrite
+				p.input.Blur()
+			}
+		}
+	case hitConfirm:
+		p.focusIdx = exportFocusConfirm
+		p.input.Blur()
+		if p.canConfirm() {
+			_ = p.confirm(events)
+		}
+	case hitCancel:
+		p.cancel()
+	}
+}
+
+func (p *exportPopup) hitTest(x, y, screenW, screenH int) popupHit {
+	if !p.active {
+		return hitNone
+	}
+	rendered := p.view(screenW)
+	if rendered == "" {
+		return hitNone
+	}
+
+	w := lipgloss.Width(rendered)
+	h := lipgloss.Height(rendered)
+	originX := max((screenW-w)/2, 0)
+	originY := max((screenH-h)/2, 0)
+
+	if x < originX || x >= originX+w ||
+		y < originY || y >= originY+h {
+		return hitNone
+	}
+
+	relY := y - originY
+	rows := strings.Split(rendered, "\n")
+	inputRow, overwriteRow, buttonRow := -1, -1, -1
+	for i, line := range rows {
+		plain := stripANSI(line)
+		switch {
+		case inputRow < 0 && strings.Contains(plain,
+			"choose export filename:"):
+			inputRow = i
+		case overwriteRow < 0 && strings.Contains(plain,
+			"File exists"):
+			overwriteRow = i
+		case buttonRow < 0 && strings.Contains(plain,
+			"[confirm]"):
+			buttonRow = i
+		}
+	}
+
+	switch relY {
+	case inputRow:
+		return hitInput
+	case overwriteRow:
+		return hitOverwrite
+	case buttonRow:
+		plain := stripANSI(rows[buttonRow])
+		idx := strings.Index(plain, "[cancel]")
+		if idx < 0 {
+			return hitConfirm
+		}
+		if x-originX >= idx {
+			return hitCancel
+		}
+		return hitConfirm
+	}
+	return hitNone
+}
+
 func defaultExportFilename(now time.Time) string {
 	return fmt.Sprintf("lazyagent-events-%s.json", now.Format("2006-01-02-1504"))
 }

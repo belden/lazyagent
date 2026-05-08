@@ -229,8 +229,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 		if click, ok := msg.(tea.MouseClickMsg); ok {
-			// Mouse handling deferred to Task 13.
-			_ = click
+			hit := m.export.hitTest(click.X, click.Y, m.width, m.height)
+			events := m.events.markedSnapshot()
+			m.export.handleClick(hit, events)
+			if m.export.confirmed {
+				m.export.confirmed = false
+				m.status = fmt.Sprintf(
+					"exported %d events to %s",
+					len(events),
+					strings.TrimSpace(expandHome(m.export.filename())))
+			}
 			return m, nil
 		}
 		return m, nil

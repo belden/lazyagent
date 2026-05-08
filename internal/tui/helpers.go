@@ -2,12 +2,19 @@ package tui
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/charmbracelet/x/ansi"
 )
+
+var ansiRE = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+
+func stripANSI(s string) string {
+	return ansiRE.ReplaceAllString(s, "")
+}
 
 // splitLines splits a string into lines, returning nil for empty input
 // instead of []string{""} which strings.Split produces.

@@ -336,6 +336,45 @@ func TestExportPopup_RenderHidesOverwriteRowWhenFileMissing(t *testing.T) {
 	}
 }
 
+func TestExportPopup_MouseClickFocusesElement(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "exists.json")
+	os.WriteFile(path, []byte("[]"), 0644)
+
+	p := newExportPopup()
+	p.open()
+	p.setFilename(path)
+
+	p.handleClick(hitOverwrite, nil)
+	if p.focusIdx != exportFocusOverwrite {
+		t.Fatalf("after overwrite click: got %d, want overwrite",
+			p.focusIdx)
+	}
+	p.handleClick(hitOverwrite, nil)
+	if !p.overwriteOK {
+		t.Fatal("second click on overwrite should toggle on")
+	}
+}
+
+func TestExportPopup_ClickConfirmActivates(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "out.json")
+
+	p := newExportPopup()
+	p.open()
+	p.setFilename(path)
+	events := []model.Event{{ID: 1, Payload: "{}"}}
+
+	p.handleClick(hitConfirm, events)
+
+	if p.active {
+		t.Fatal("clicking confirm should close popup on success")
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("file not written: %v", err)
+	}
+}
+
 func TestExpandHome(t *testing.T) {
 	home, _ := os.UserHomeDir()
 	cases := []struct{ in, want string }{

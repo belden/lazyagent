@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"regexp"
 	"strings"
 	"testing"
 
@@ -10,12 +9,6 @@ import (
 
 func detailContent(d detailModel) string {
 	return d.view(100, 24, false)
-}
-
-var ansiRE = regexp.MustCompile(`\x1b\[[0-9;]*m`)
-
-func stripANSI(s string) string {
-	return ansiRE.ReplaceAllString(s, "")
 }
 
 func TestRenderToolDetail_SessionDiffSummaryOnly(t *testing.T) {
