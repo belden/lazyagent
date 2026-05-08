@@ -72,9 +72,10 @@ type Model struct {
 	detail   detailModel
 	filter   filterModel
 
-	focus     focusPane
-	status    string
-	width     int
+	focus      focusPane
+	status     string
+	statusHold int
+	width      int
 	height    int
 	lastError error
 	lastKey   string
@@ -227,6 +228,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					"exported %d events to %s",
 					len(events),
 					expandHome(m.export.filename()))
+				m.statusHold = 3
 				m.export.confirmed = false
 			}
 			return m, cmd
@@ -241,6 +243,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					"exported %d events to %s",
 					len(events),
 					expandHome(m.export.filename()))
+				m.statusHold = 3
 			}
 			return m, nil
 		}
@@ -718,8 +721,10 @@ func (m *Model) applyProjects(projects []model.Project) {
 	m.allProjects = projects
 	m.projects.setData(m.allProjects, m.allSessions)
 	m.syncSessionPane()
-	m.status = fmt.Sprintf("P:%d S:%d E:%d/%d A:%d",
-		len(m.allProjects), len(m.allSessions), len(m.events.events), m.events.rawCount, len(m.agents.agents))
+	if m.statusHold == 0 {
+		m.status = fmt.Sprintf("P:%d S:%d E:%d/%d A:%d",
+			len(m.allProjects), len(m.allSessions), len(m.events.events), m.events.rawCount, len(m.agents.agents))
+	}
 }
 
 func (m *Model) applyProjectSessions(projectID int64, sessions []model.Session) {
@@ -732,16 +737,22 @@ func (m *Model) applyProjectSessions(projectID int64, sessions []model.Session) 
 		m.syncDetailFromEvent()
 	}
 	m.syncSessionPane()
-	m.status = fmt.Sprintf("P:%d S:%d E:%d/%d A:%d",
-		len(m.allProjects), len(m.allSessions), len(m.events.events), m.events.rawCount, len(m.agents.agents))
+	if m.statusHold == 0 {
+		m.status = fmt.Sprintf("P:%d S:%d E:%d/%d A:%d",
+			len(m.allProjects), len(m.allSessions), len(m.events.events), m.events.rawCount, len(m.agents.agents))
+	}
 }
 
 func (m *Model) applySessionData(d sessionDataMsg) {
 	m.agents.setAgents(d.agents)
 	m.events.setEvents(d.events, d.rawCount, d.offset)
 	m.syncDetailFromEvent()
-	m.status = fmt.Sprintf("P:%d S:%d E:%d/%d A:%d",
-		len(m.allProjects), len(m.allSessions), len(d.events), d.rawCount, len(d.agents))
+	if m.statusHold > 0 {
+		m.statusHold--
+	} else {
+		m.status = fmt.Sprintf("P:%d S:%d E:%d/%d A:%d",
+			len(m.allProjects), len(m.allSessions), len(d.events), d.rawCount, len(d.agents))
+	}
 }
 
 func replaceProjectSessions(existing []model.Session, projectID int64, sessions []model.Session) []model.Session {

@@ -548,3 +548,51 @@ func TestExportFullFlow(t *testing.T) {
 		t.Fatalf("status missing path: %q", m.status)
 	}
 }
+
+func TestExportStatus_HoldsAcrossTicks(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "hold.json")
+
+	m := newModel(nil, time.Second)
+	m.focus = focusEvents
+	m.events.setEvents([]model.Event{
+		{ID: 1, Payload: `{"k":"a"}`},
+	}, 1, 0)
+	m.events.autoFollow = false
+	m.events.cursor = 0
+
+	updated, _ := m.Update(testKey("m"))
+	m = updated.(Model)
+	updated, _ = m.Update(testKey("x"))
+	m = updated.(Model)
+	m.export.setFilename(path)
+	updated, _ = m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+	m = updated.(Model)
+
+	want := m.status
+	if !strings.Contains(want, "exported 1 events") {
+		t.Fatalf("status: got %q", want)
+	}
+	if m.statusHold != 3 {
+		t.Fatalf("statusHold after export: got %d, want 3", m.statusHold)
+	}
+
+	for i := 0; i < 3; i++ {
+		updated, _ = m.Update(sessionDataMsg{})
+		m = updated.(Model)
+		if m.status != want {
+			t.Fatalf("status clobbered after %d refreshes: got %q, want %q",
+				i+1, m.status, want)
+		}
+	}
+
+	if m.statusHold != 0 {
+		t.Fatalf("statusHold after 3 refreshes: got %d, want 0", m.statusHold)
+	}
+
+	updated, _ = m.Update(sessionDataMsg{})
+	m = updated.(Model)
+	if m.status == want {
+		t.Fatal("status should be overwritten by counters once hold expires")
+	}
+}
