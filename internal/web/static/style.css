@@ -277,6 +277,7 @@ input[type="text"]:focus, select:focus { outline: 1px solid var(--accent); }
 }
 .events-block.collapsed { flex: 0 0 auto; }
 .events-block.collapsed .events-head .filters,
+.events-block.collapsed .events-head .export,
 .events-block.collapsed #event-list { display: none; }
 
 h3.collapsible {
@@ -679,6 +680,33 @@ h3.collapsible[aria-expanded="true"] .caret { transform: rotate(90deg); }
 }
 .title-row .title { font-weight: 500; }
 .subtitle {
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+/* mark and export */
+.event-mark {
+  margin: 0 0.5rem 0 0;
+  vertical-align: middle;
+}
+.events li.marked {
+  border-left: 3px solid var(--accent);
+}
+.events-head .export {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.mark-count {
+  color: var(--text-dim);
+  font-size: 11px;
+}
+.export-btn,
+.clear-btn {
+  font-size: 11px;
+  padding: 2px 8px;
+}
+.export-status {
   color: var(--text-dim);
   font-size: 11px;
 }
