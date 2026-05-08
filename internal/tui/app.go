@@ -3,7 +3,6 @@ package tui
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"charm.land/bubbles/v2/help"
@@ -206,10 +205,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.tokens.visible || m.debug.isVisible() || m.errorOverlay.visible {
 			return m, nil
 		}
+		if m.export.active {
+			// Fall through to the popup-active intercept below.
+			break
+		}
 		return m.handleMouseClick(msg)
 
 	case tea.MouseWheelMsg:
-		if m.tokens.visible || m.debug.isVisible() || m.errorOverlay.visible {
+		if m.tokens.visible || m.debug.isVisible() || m.errorOverlay.visible || m.export.active {
 			return m, nil
 		}
 		return m.handleMouseWheel(msg)
@@ -223,7 +226,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.status = fmt.Sprintf(
 					"exported %d events to %s",
 					len(events),
-					strings.TrimSpace(expandHome(m.export.filename())))
+					expandHome(m.export.filename()))
 				m.export.confirmed = false
 			}
 			return m, cmd
@@ -237,7 +240,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.status = fmt.Sprintf(
 					"exported %d events to %s",
 					len(events),
-					strings.TrimSpace(expandHome(m.export.filename())))
+					expandHome(m.export.filename()))
 			}
 			return m, nil
 		}

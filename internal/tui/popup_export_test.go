@@ -376,6 +376,99 @@ func TestExportPopup_ClickConfirmActivates(t *testing.T) {
 	}
 }
 
+// TestUpdate_PopupActiveInterceptsClicks verifies that while the
+// export popup is active, MouseClickMsg events are routed to the
+// popup intercept rather than handleMouseClick on the underlying
+// pane. We assert the events-pane cursor and focus do not change
+// and that the popup remains active after an arbitrary click.
+func TestUpdate_PopupActiveInterceptsClicks(t *testing.T) {
+	m := newModel(nil, time.Second)
+	m.width = 80
+	m.height = 24
+	m.focus = focusEvents
+	m.events.setEvents([]model.Event{
+		{ID: 1, Payload: `{"k":"a"}`},
+		{ID: 2, Payload: `{"k":"b"}`},
+		{ID: 3, Payload: `{"k":"c"}`},
+	}, 3, 0)
+	m.events.autoFollow = false
+	m.events.cursor = 1
+
+	// Mark an event so the popup can open with content.
+	updated, _ := m.Update(testKey("m"))
+	m = updated.(Model)
+
+	// Open the export popup.
+	updated, _ = m.Update(testKey("x"))
+	m = updated.(Model)
+	if !m.export.active {
+		t.Fatal("popup should be active after pressing x")
+	}
+
+	preCursor := m.events.cursor
+	preFocus := m.focus
+
+	// Send an arbitrary click that, without the intercept, would
+	// hit the events pane and possibly move the cursor or refocus.
+	click := tea.MouseClickMsg(tea.Mouse{
+		X: 0, Y: 0, Button: tea.MouseLeft,
+	})
+	updated, _ = m.Update(click)
+	m = updated.(Model)
+
+	if !m.export.active {
+		t.Fatal("popup should remain active after click outside it")
+	}
+	if m.events.cursor != preCursor {
+		t.Fatalf("events cursor changed: got %d, want %d",
+			m.events.cursor, preCursor)
+	}
+	if m.focus != preFocus {
+		t.Fatalf("focus changed: got %v, want %v",
+			m.focus, preFocus)
+	}
+}
+
+// TestUpdate_PopupActiveDropsWheel verifies that while the popup
+// is active, MouseWheelMsg events are silently dropped instead of
+// scrolling the pane underneath.
+func TestUpdate_PopupActiveDropsWheel(t *testing.T) {
+	m := newModel(nil, time.Second)
+	m.width = 80
+	m.height = 24
+	m.focus = focusEvents
+	m.events.setEvents([]model.Event{
+		{ID: 1, Payload: `{"k":"a"}`},
+		{ID: 2, Payload: `{"k":"b"}`},
+		{ID: 3, Payload: `{"k":"c"}`},
+	}, 3, 0)
+	m.events.autoFollow = false
+	m.events.cursor = 0
+
+	updated, _ := m.Update(testKey("m"))
+	m = updated.(Model)
+	updated, _ = m.Update(testKey("x"))
+	m = updated.(Model)
+	if !m.export.active {
+		t.Fatal("popup should be active")
+	}
+
+	preCursor := m.events.cursor
+	wheel := tea.MouseWheelMsg(tea.Mouse{
+		X: 0, Y: 0, Button: tea.MouseWheelDown,
+	})
+	updated, _ = m.Update(wheel)
+	m = updated.(Model)
+
+	if !m.export.active {
+		t.Fatal("popup should remain active after wheel")
+	}
+	if m.events.cursor != preCursor {
+		t.Fatalf("events cursor scrolled: got %d, want %d",
+			m.events.cursor, preCursor)
+	}
+}
+
 func TestExpandHome(t *testing.T) {
 	home, _ := os.UserHomeDir()
 	cases := []struct{ in, want string }{
