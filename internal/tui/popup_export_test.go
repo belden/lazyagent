@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/chojs23/lazyagent/internal/model"
@@ -389,5 +390,68 @@ func TestExpandHome(t *testing.T) {
 			t.Fatalf("expandHome(%q) = %q, want %q",
 				c.in, got, c.want)
 		}
+	}
+}
+
+func TestExportFullFlow(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "flow.json")
+
+	m := newModel(nil, time.Second)
+	m.focus = focusEvents
+	m.events.setEvents([]model.Event{
+		{ID: 1, Payload: `{"k":"first"}`},
+		{ID: 2, Payload: `{"k":"second"}`},
+		{ID: 3, Payload: `{"k":"third"}`},
+	}, 3, 0)
+	m.events.autoFollow = false
+	m.events.cursor = 0
+
+	updated, _ := m.Update(testKey("m"))
+	m = updated.(Model)
+	updated, _ = m.Update(testKey("j"))
+	m = updated.(Model)
+	updated, _ = m.Update(testKey("m"))
+	m = updated.(Model)
+
+	if m.events.markedCount() != 2 {
+		t.Fatalf("markedCount: got %d, want 2",
+			m.events.markedCount())
+	}
+
+	updated, _ = m.Update(testKey("x"))
+	m = updated.(Model)
+	if !m.export.active {
+		t.Fatal("popup should be active")
+	}
+
+	m.export.setFilename(path)
+	updated, _ = m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+	m = updated.(Model)
+
+	if m.export.active {
+		t.Fatal("popup should close")
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	var got []map[string]any
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("unmarshal: %v\n%s", err, data)
+	}
+	if len(got) != 2 {
+		t.Fatalf("len: got %d, want 2", len(got))
+	}
+	if got[0]["k"] != "first" || got[1]["k"] != "third" {
+		t.Fatalf("contents: got %v", got)
+	}
+
+	if !strings.Contains(m.status, "exported 2 events") {
+		t.Fatalf("status: got %q", m.status)
+	}
+	if !strings.Contains(m.status, path) {
+		t.Fatalf("status missing path: %q", m.status)
 	}
 }
