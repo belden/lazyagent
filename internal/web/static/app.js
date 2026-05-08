@@ -43,6 +43,32 @@ const state = {
   },
 };
 
+// Mark and export state. Lives outside `state` because marks must survive
+// the auto-refresh tick (which mutates state.cache.events) and because
+// they're cleared explicitly on session change rather than being part of
+// any cache lifecycle.
+const marks = new Set();   // event IDs (numbers)
+let markAnchor = null;     // last single-clicked event ID
+
+function clearMarks() {
+  marks.clear();
+  markAnchor = null;
+  renderExportSlot();
+  renderEvents();
+}
+
+function setRowMarkedClass(id, isMarked) {
+  const cb = document.querySelector(`.event-mark[data-event-id="${id}"]`);
+  if (!cb) return;
+  cb.checked = isMarked;
+  const li = cb.closest("li");
+  if (li) li.classList.toggle("marked", isMarked);
+}
+
+function renderExportSlot() {
+  // Filled in by Task 7. Stub keeps clearMarks runnable in the meantime.
+}
+
 const REFRESH_MS = 2000;
 
 const els = {
@@ -185,6 +211,7 @@ async function toggleProject(id) {
 }
 
 async function selectSession(id) {
+  clearMarks();
   state.sessionId = id;
   state.eventId = null;
   state.gen++;
