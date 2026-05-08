@@ -81,8 +81,70 @@ function renderExportSlot() {
   slot.querySelector(".clear-btn").addEventListener("click", clearMarks);
 }
 
-function exportMarks() {
-  // Filled in by Task 8.
+async function exportMarks() {
+  const ids = [...marks].sort((a, b) => a - b);
+  const results = await Promise.allSettled(
+    ids.map((id) =>
+      fetch(`/api/events/${id}`).then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+    )
+  );
+
+  const payloads = [];
+  let failed = 0;
+  for (const r of results) {
+    if (r.status !== "fulfilled") {
+      failed++;
+      continue;
+    }
+    const ev = r.value;
+    if (ev.payload !== undefined) {
+      payloads.push(ev.payload);
+    } else if (ev.raw && ev.raw !== "") {
+      payloads.push(null);
+    } else {
+      payloads.push({});
+    }
+  }
+
+  const json = JSON.stringify(payloads, null, 2);
+  const blob = new Blob([json], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = defaultExportFilename();
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+
+  if (failed > 0) {
+    flashStatus(`exported ${payloads.length} events (${failed} failed)`);
+  } else {
+    flashStatus(`exported ${payloads.length} events`);
+  }
+}
+
+function defaultExportFilename() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  return `lazyagent-events-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}.json`;
+}
+
+function flashStatus(text) {
+  const slot = document.querySelector(".events-head .export");
+  if (!slot) return;
+  const existing = slot.querySelector(".export-status");
+  if (existing) existing.remove();
+  const span = document.createElement("span");
+  span.className = "export-status";
+  span.textContent = text;
+  slot.appendChild(span);
+  setTimeout(() => {
+    if (span.parentNode === slot) span.remove();
+  }, 3000);
 }
 
 function onMarkClick(ev, id) {
