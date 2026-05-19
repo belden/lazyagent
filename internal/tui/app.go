@@ -329,6 +329,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "pgup":
+		m.events.halfPageUp(m.events.height)
+		return m, m.syncEventSelectionAndMaybeLoadOlder()
+	case "pgdown":
+		m.events.halfPageDown(m.events.height)
+		return m, m.syncEventSelectionAndMaybeLoadOlder()
+	case "alt+pgup":
+		m.events.fullPageUp(m.events.height)
+		return m, m.syncEventSelectionAndMaybeLoadOlder()
+	case "alt+pgdown":
+		m.events.fullPageDown(m.events.height)
+		return m, m.syncEventSelectionAndMaybeLoadOlder()
+	}
 	switch {
 	case key.Matches(msg, m.keys.Quit):
 		return m, tea.Quit

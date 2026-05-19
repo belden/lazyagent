@@ -207,6 +207,8 @@ Main keys:
 - `j`, `k` move through lists
 - `g`, `G` jump to top or bottom
 - `ctrl+u`, `ctrl+d` move by half a page
+- `pgup`, `pgdown` move the events pane by half a page
+- `alt+pgup`, `alt+pgdown` move the events pane by a full page
 - `enter`, `space` select the current item
 - `/` opens search
 - `t`, `shift+t` cycles event type filters

@@ -211,6 +211,58 @@ func TestHalfPageDown_ClampToEnd(t *testing.T) {
 	}
 }
 
+func TestFullPageUp(t *testing.T) {
+	e := newEvents()
+	e.setEvents(makeEvents(100), 100, 0)
+	e.autoFollow = false
+	e.cursor = 50
+
+	e.fullPageUp(20)
+
+	if e.cursor != 30 {
+		t.Fatalf("cursor after fullPageUp: got %d, want 30", e.cursor)
+	}
+}
+
+func TestFullPageUp_ClampToZero(t *testing.T) {
+	e := newEvents()
+	e.setEvents(makeEvents(100), 100, 0)
+	e.autoFollow = false
+	e.cursor = 5
+
+	e.fullPageUp(20)
+
+	if e.cursor != 0 {
+		t.Fatalf("cursor should clamp to 0, got %d", e.cursor)
+	}
+}
+
+func TestFullPageDown(t *testing.T) {
+	e := newEvents()
+	e.setEvents(makeEvents(100), 100, 0)
+	e.autoFollow = false
+	e.cursor = 50
+
+	e.fullPageDown(20)
+
+	if e.cursor != 70 {
+		t.Fatalf("cursor after fullPageDown: got %d, want 70", e.cursor)
+	}
+}
+
+func TestFullPageDown_ClampToEnd(t *testing.T) {
+	e := newEvents()
+	e.setEvents(makeEvents(100), 100, 0)
+	e.autoFollow = false
+	e.cursor = 90
+
+	e.fullPageDown(20)
+
+	if e.cursor != 99 {
+		t.Fatalf("cursor should clamp to 99, got %d", e.cursor)
+	}
+}
+
 func TestGoTop(t *testing.T) {
 	e := newEvents()
 	e.setEvents(makeEvents(100), 100, 0)

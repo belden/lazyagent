@@ -441,6 +441,65 @@ func TestUpdateEventsDoubleGRequestsOlderAndClearsLastKey(t *testing.T) {
 	}
 }
 
+func TestEventsPageKeys_RouteFromAnyFocus(t *testing.T) {
+	pgup := tea.KeyPressMsg(tea.Key{Code: tea.KeyPgUp})
+	pgdown := tea.KeyPressMsg(tea.Key{Code: tea.KeyPgDown})
+	altPgUp := tea.KeyPressMsg(tea.Key{Code: tea.KeyPgUp, Mod: tea.ModAlt})
+	altPgDown := tea.KeyPressMsg(tea.Key{Code: tea.KeyPgDown, Mod: tea.ModAlt})
+
+	focuses := []focusPane{focusProjects, focusSession, focusAgents, focusEvents, focusDetail}
+
+	tests := []struct {
+		name    string
+		msg     tea.KeyMsg
+		startAt int
+		viewH   int
+		want    int
+	}{
+		{name: "pgup half page up", msg: pgup, startAt: 50, viewH: 20, want: 40},
+		{name: "pgdown half page down", msg: pgdown, startAt: 50, viewH: 20, want: 60},
+		{name: "alt+pgup full page up", msg: altPgUp, startAt: 50, viewH: 20, want: 30},
+		{name: "alt+pgdown full page down", msg: altPgDown, startAt: 50, viewH: 20, want: 70},
+	}
+
+	for _, tt := range tests {
+		for _, f := range focuses {
+			t.Run(tt.name+"/"+focusName(f), func(t *testing.T) {
+				m := newModel(nil, time.Second)
+				m.focus = f
+				m.agents.setAgents([]model.Agent{{ID: "agent-1"}})
+				m.events.setEvents(makeEvents(100), 100, 0)
+				m.events.autoFollow = false
+				m.events.cursor = tt.startAt
+				m.events.height = tt.viewH
+
+				updated, _ := m.handleKey(tt.msg)
+				m = updated.(Model)
+
+				if m.events.cursor != tt.want {
+					t.Fatalf("cursor = %d, want %d", m.events.cursor, tt.want)
+				}
+			})
+		}
+	}
+}
+
+func focusName(f focusPane) string {
+	switch f {
+	case focusProjects:
+		return "projects"
+	case focusSession:
+		return "session"
+	case focusAgents:
+		return "agents"
+	case focusEvents:
+		return "events"
+	case focusDetail:
+		return "detail"
+	}
+	return "unknown"
+}
+
 func TestUpdateEventsHorizontalScrollPreservesSyncPath(t *testing.T) {
 	m := newModel(nil, time.Second)
 	m.agents.setAgents([]model.Agent{{ID: "agent-1"}})

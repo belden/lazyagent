@@ -175,6 +175,17 @@ func (e *eventsModel) halfPageDown(viewH int) {
 	e.clampScroll()
 }
 
+func (e *eventsModel) fullPageUp(viewH int) {
+	e.cursor = max(e.cursor-viewH, 0)
+	e.autoFollow = false
+	e.clampScroll()
+}
+
+func (e *eventsModel) fullPageDown(viewH int) {
+	e.cursor = min(e.cursor+viewH, max(len(e.events)-1, 0))
+	e.clampScroll()
+}
+
 func (e *eventsModel) goTop() {
 	e.cursor = 0
 	e.autoFollow = false
