@@ -25,6 +25,69 @@ func testRoutingTUIStore(t *testing.T) *store.Store {
 	return st
 }
 
+func seedLazyLoadingStore(t *testing.T) *store.Store {
+	t.Helper()
+	st := testRoutingTUIStore(t)
+	ctx := t.Context()
+	if err := st.WithTx(ctx, func(q *store.Queries) error {
+		projectID, err := q.CreateProject(ctx, "lazy-proj", "Lazy", "/tmp/lazy", "")
+		if err != nil {
+			return err
+		}
+		if err := q.UpsertSession(ctx, "sess-1", "", projectID, "session", "claude", nil, 1000, ""); err != nil {
+			return err
+		}
+		if err := q.UpsertAgent(ctx, "agent-1", "sess-1", "", "Main", "", "main", ""); err != nil {
+			return err
+		}
+		_, err = q.InsertEvent(ctx, model.Event{
+			AgentID:   "agent-1",
+			SessionID: "sess-1",
+			Type:      "message",
+			Subtype:   "Stop",
+			Timestamp: 1000,
+			Payload:   `{"last_assistant_message":"hello"}`,
+		})
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return st
+}
+
+func loadSeededProjects(t *testing.T) Model {
+	t.Helper()
+	m := newModel(seedLazyLoadingStore(t), time.Second)
+	updated, cmd := m.Update(m.loadProjectsCmd()())
+	if cmd != nil {
+		t.Fatal("project load should not return command")
+	}
+	return updated.(Model)
+}
+
+func seedTwoProjectStore(t *testing.T) *store.Store {
+	t.Helper()
+	st := testRoutingTUIStore(t)
+	ctx := t.Context()
+	if err := st.WithTx(ctx, func(q *store.Queries) error {
+		projectA, err := q.CreateProject(ctx, "alpha", "Alpha", "/tmp/alpha", "")
+		if err != nil {
+			return err
+		}
+		projectB, err := q.CreateProject(ctx, "beta", "Beta", "/tmp/beta", "")
+		if err != nil {
+			return err
+		}
+		if err := q.UpsertSession(ctx, "alpha-session", "", projectA, "alpha", "claude", nil, 1000, ""); err != nil {
+			return err
+		}
+		return q.UpsertSession(ctx, "beta-session", "", projectB, "beta", "claude", nil, 1000, "")
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return st
+}
+
 func TestSetFocusUpdatesLayout(t *testing.T) {
 	m := newModel(nil, time.Second)
 	m.width = 100
@@ -41,7 +104,7 @@ func TestSetFocusUpdatesLayout(t *testing.T) {
 }
 
 func TestActivateProjectSelectionResetsAgentsAndSyncsSession(t *testing.T) {
-	m := newModel(nil, time.Second)
+	m := newModel(testRoutingTUIStore(t), time.Second)
 	m.allProjects = []model.Project{{ID: 7, Name: "proj", Directory: "/tmp/proj"}}
 	m.allSessions = []model.Session{{ID: "sess-1", ProjectID: 7, ProjectName: "proj", Runtime: "claude"}}
 	m.projects.selectedSession = "sess-1"
@@ -89,7 +152,8 @@ func TestSelectedAgentLabelPrefersStoredName(t *testing.T) {
 }
 
 func TestApplyAgentSelectionUpdatesFilterLabel(t *testing.T) {
-	m := newModel(nil, time.Second)
+	m := newModel(testRoutingTUIStore(t), time.Second)
+	m.projects.selectedSession = "sess-1"
 	m.agents.selectedAgent = "agent-abcdef123456"
 
 	cmd := m.applyAgentSelection()
@@ -99,6 +163,164 @@ func TestApplyAgentSelectionUpdatesFilterLabel(t *testing.T) {
 	}
 	if got := m.filter.agentLabel; got != shortID("agent-abcdef123456") {
 		t.Fatalf("agent label = %q, want %q", got, shortID("agent-abcdef123456"))
+	}
+}
+
+func TestApplyAgentSelectionWithoutSessionDoesNotLoadEvents(t *testing.T) {
+	m := newModel(testRoutingTUIStore(t), time.Second)
+	m.agents.selectedAgent = "agent-abcdef123456"
+
+	cmd := m.applyAgentSelection()
+
+	if cmd != nil {
+		t.Fatal("applyAgentSelection without a selected session should not return a load command")
+	}
+	if got := m.filter.agentLabel; got != shortID("agent-abcdef123456") {
+		t.Fatalf("agent label = %q, want %q", got, shortID("agent-abcdef123456"))
+	}
+}
+
+func TestInitialLoadFetchesProjectsOnly(t *testing.T) {
+	st := seedLazyLoadingStore(t)
+	m := newModel(st, time.Second)
+
+	msg := m.loadProjectsCmd()()
+	updated, cmd := m.Update(msg)
+	if cmd != nil {
+		t.Fatal("project load should not schedule another command")
+	}
+	m = updated.(Model)
+
+	if len(m.allProjects) != 1 {
+		t.Fatalf("projects len = %d, want 1", len(m.allProjects))
+	}
+	if len(m.allSessions) != 0 {
+		t.Fatalf("sessions len = %d, want 0", len(m.allSessions))
+	}
+	if m.projects.currentSessionID() != "" {
+		t.Fatalf("selected session = %q, want empty", m.projects.currentSessionID())
+	}
+	if len(m.projects.expandedProjs) != 0 {
+		t.Fatalf("expanded projects = %#v, want none", m.projects.expandedProjs)
+	}
+	if len(m.agents.agents) != 0 || len(m.events.events) != 0 {
+		t.Fatalf("initial load should not load agents/events: agents=%d events=%d", len(m.agents.agents), len(m.events.events))
+	}
+}
+
+func TestOpeningProjectLoadsSessionsWithoutSelectingSession(t *testing.T) {
+	m := loadSeededProjects(t)
+
+	updated, cmd := m.updateProjects(testKey("enter"))
+	if cmd == nil {
+		t.Fatal("opening a project should return a session load command")
+	}
+	m = updated.(Model)
+	updated, cmd = m.Update(cmd())
+	if cmd != nil {
+		t.Fatal("session load should not schedule another command")
+	}
+	m = updated.(Model)
+
+	if !m.projects.expandedProjs[m.allProjects[0].ID] {
+		t.Fatal("project should be expanded")
+	}
+	if len(m.allSessions) != 1 {
+		t.Fatalf("sessions len = %d, want 1", len(m.allSessions))
+	}
+	if m.projects.currentSessionID() != "" {
+		t.Fatalf("selected session = %q, want empty", m.projects.currentSessionID())
+	}
+	if len(m.agents.agents) != 0 || len(m.events.events) != 0 {
+		t.Fatalf("opening project should not load agents/events: agents=%d events=%d", len(m.agents.agents), len(m.events.events))
+	}
+}
+
+func TestSelectingSessionLoadsAgentsAndEvents(t *testing.T) {
+	m := loadSeededProjects(t)
+	updated, cmd := m.updateProjects(testKey("enter"))
+	m = updated.(Model)
+	updated, _ = m.Update(cmd())
+	m = updated.(Model)
+	m.projects.cursor = 1
+
+	updated, cmd = m.updateProjects(testKey("enter"))
+	if cmd == nil {
+		t.Fatal("selecting a session should return a session data load command")
+	}
+	m = updated.(Model)
+	updated, cmd = m.Update(cmd())
+	if cmd != nil {
+		t.Fatal("session data load should not schedule another command")
+	}
+	m = updated.(Model)
+
+	if got := m.projects.currentSessionID(); got != "sess-1" {
+		t.Fatalf("selected session = %q, want sess-1", got)
+	}
+	if m.session.session == nil || m.session.session.ID != "sess-1" {
+		t.Fatalf("session pane = %#v, want sess-1", m.session.session)
+	}
+	if len(m.agents.agents) != 1 {
+		t.Fatalf("agents len = %d, want 1", len(m.agents.agents))
+	}
+	if len(m.events.events) != 1 {
+		t.Fatalf("events len = %d, want 1", len(m.events.events))
+	}
+	if m.detail.event == nil || m.detail.event.ID == 0 {
+		t.Fatalf("detail event = %#v, want loaded event", m.detail.event)
+	}
+}
+
+func TestOpeningProjectLoadsOnlyThatProjectsSessions(t *testing.T) {
+	m := newModel(seedTwoProjectStore(t), time.Second)
+	updated, cmd := m.Update(m.loadProjectsCmd()())
+	if cmd != nil {
+		t.Fatal("project load should not return command")
+	}
+	m = updated.(Model)
+
+	updated, cmd = m.updateProjects(testKey("enter"))
+	if cmd == nil {
+		t.Fatal("opening the first project should return a session load command")
+	}
+	m = updated.(Model)
+	updated, cmd = m.Update(cmd())
+	if cmd != nil {
+		t.Fatal("project session load should not return command")
+	}
+	m = updated.(Model)
+
+	if len(m.allSessions) != 1 {
+		t.Fatalf("sessions len = %d, want 1", len(m.allSessions))
+	}
+	if m.allSessions[0].ID != "alpha-session" {
+		t.Fatalf("loaded session = %q, want alpha-session", m.allSessions[0].ID)
+	}
+	for _, item := range m.projects.items {
+		if item.sessionID == "beta-session" {
+			t.Fatalf("closed project session should not be loaded into sidebar: %#v", m.projects.items)
+		}
+	}
+}
+
+func TestRefreshingProjectSessionsClearsStaleSelectedSession(t *testing.T) {
+	m := newModel(nil, time.Second)
+	m.allProjects = []model.Project{{ID: 1, Name: "proj"}}
+	m.allSessions = []model.Session{{ID: "stale-session", ProjectID: 1, Runtime: "claude"}}
+	m.projects.setData(m.allProjects, m.allSessions)
+	m.projects.selectedSession = "stale-session"
+	m.agents.setAgents([]model.Agent{{ID: "agent-1", SessionID: "stale-session"}})
+	m.events.setEvents([]model.Event{{ID: 1, AgentID: "agent-1", SessionID: "stale-session"}}, 1, 0)
+	m.syncDetailFromEvent()
+
+	m.applyProjectSessions(1, nil)
+
+	if got := m.projects.currentSessionID(); got != "" {
+		t.Fatalf("selected session = %q, want empty", got)
+	}
+	if len(m.agents.agents) != 0 || len(m.events.events) != 0 || m.detail.event != nil {
+		t.Fatalf("stale selected data not cleared: agents=%d events=%d detail=%#v", len(m.agents.agents), len(m.events.events), m.detail.event)
 	}
 }
 

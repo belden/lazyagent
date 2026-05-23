@@ -20,6 +20,25 @@ func testStore(t *testing.T) *Store {
 	return st
 }
 
+func TestStartupIndexesExist(t *testing.T) {
+	st := testStore(t)
+	for _, name := range []string{
+		"idx_events_subagent_stop_agent",
+		"idx_sessions_project_root_recent",
+		"idx_sessions_root_recent",
+		"idx_sessions_active_activity",
+		"idx_sessions_active_parent",
+	} {
+		var count int
+		if err := st.db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = ?`, name).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		if count != 1 {
+			t.Fatalf("index %s count = %d, want 1", name, count)
+		}
+	}
+}
+
 func TestClearSessionEventsClearsEntireTree(t *testing.T) {
 	st := testStore(t)
 	ctx := context.Background()

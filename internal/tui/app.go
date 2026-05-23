@@ -26,14 +26,28 @@ const (
 	paneCount = 5
 )
 
-type dataMsg struct {
+type projectsMsg struct {
 	projects []model.Project
-	sessions []model.Session
-	agents   []model.Agent
-	events   []model.Event
-	rawCount int
-	offset   int // offset of the first loaded event within the (possibly filtered) result set
 	err      error
+}
+
+type projectSessionsMsg struct {
+	projectID int64
+	sessions  []model.Session
+	err       error
+}
+
+type sessionDataMsg struct {
+	sessionID string
+	agents    []model.Agent
+	events    []model.Event
+	rawCount  int
+	offset    int
+	err       error
+}
+
+type maintenanceMsg struct {
+	err error
 }
 
 type moreEventsMsg struct {
@@ -100,7 +114,7 @@ func newModel(st *store.Store, refreshInterval time.Duration) Model {
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.loadDataCmd(), tickCmd(m.refreshInterval), spinnerTickCmd())
+	return tea.Batch(m.loadProjectsCmd(), tickCmd(m.refreshInterval), spinnerTickCmd())
 }
 
 func (m *Model) syncLayout() {
@@ -128,13 +142,41 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.syncLayout()
 		return m, nil
 
-	case dataMsg:
+	case projectsMsg:
 		if msg.err != nil {
 			m.reportError("Refresh failed", msg.err)
 			return m, nil
 		}
 		m.lastError = nil
-		m.applyData(msg)
+		m.applyProjects(msg.projects)
+		return m, nil
+
+	case projectSessionsMsg:
+		if msg.err != nil {
+			m.reportError("Load sessions failed", msg.err)
+			return m, nil
+		}
+		m.lastError = nil
+		m.applyProjectSessions(msg.projectID, msg.sessions)
+		return m, nil
+
+	case sessionDataMsg:
+		if msg.err != nil {
+			m.reportError("Load session failed", msg.err)
+			return m, nil
+		}
+		if msg.sessionID != m.projects.currentSessionID() {
+			return m, nil
+		}
+		m.lastError = nil
+		m.applySessionData(msg)
+		return m, nil
+
+	case maintenanceMsg:
+		if msg.err != nil {
+			m.reportError("Refresh failed", msg.err)
+			return m, nil
+		}
 		return m, nil
 
 	case moreEventsMsg:
@@ -149,7 +191,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tickMsg:
-		return m, tea.Batch(m.loadDataCmd(), tickCmd(m.refreshInterval))
+		return m, tea.Batch(m.refreshVisibleDataCmd(), tickCmd(m.refreshInterval))
 
 	case spinnerTickMsg:
 		m.errorOverlay.update(time.Time(msg))
@@ -276,7 +318,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case msg.Key().Code == tea.KeyEscape && m.filter.searchQuery != "" && m.focus != focusDetail:
 		m.filter.clearSearch()
 		m.status = "Search: off"
-		return m, m.loadDataCmd()
+		return m, m.loadSelectedSessionDataCmd()
 	case key.Matches(msg, m.keys.Search):
 		m.filter.enterSearch()
 		m.status = "Type search query, enter to apply, esc to cancel"
@@ -285,18 +327,18 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, m.keys.CycleType):
 		m.filter.cycleType()
 		m.status = "Filter: " + m.filter.typeLabel()
-		return m, m.loadDataCmd()
+		return m, m.loadSelectedSessionDataCmd()
 	case key.Matches(msg, m.keys.CycleTypeRev):
 		m.filter.cycleTypeReverse()
 		m.status = "Filter: " + m.filter.typeLabel()
-		return m, m.loadDataCmd()
+		return m, m.loadSelectedSessionDataCmd()
 	case key.Matches(msg, m.keys.ToggleAuto):
 		m.events.toggleAutoFollow()
 		m.status = "Auto-follow: " + onOff(m.events.autoFollow)
 		return m, nil
 	case key.Matches(msg, m.keys.Refresh):
 		m.status = "Refreshing..."
-		return m, m.loadDataCmd()
+		return m, m.refreshVisibleDataCmd()
 	case key.Matches(msg, m.keys.Help):
 		m.help.ShowAll = !m.help.ShowAll
 		m.syncLayout()
@@ -306,7 +348,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.agents.selectedAgent = ""
 			m.filter.setAgentLabel("all")
 			m.status = "Agent filter: all"
-			return m, m.loadDataCmd()
+			return m, m.loadSelectedSessionDataCmd()
 		}
 	case key.Matches(msg, m.keys.DebugLog):
 		m.debug.toggle()
@@ -388,9 +430,14 @@ func (m Model) updateProjects(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	switch k {
 	case "enter", "space":
+		item := m.projects.currentItem()
 		if m.projects.enter() {
 			m.lastKey = k
 			return m, m.activateProjectSelection()
+		}
+		if item != nil && item.kind == "project" && m.projects.expandedProjs[item.projectID] {
+			m.lastKey = k
+			return m, m.loadProjectSessionsCmd(item.projectID)
 		}
 	}
 	m.lastKey = k
@@ -539,7 +586,7 @@ func (m Model) updateSearch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.filter.commitSearch()
 			m.status = "Search: " + orDefault(m.filter.searchQuery, "off")
 			m.syncLayout()
-			return m, m.loadDataCmd()
+			return m, m.loadSelectedSessionDataCmd()
 		case tea.KeyEscape:
 			m.filter.cancelSearch()
 			m.status = "Search cancelled"
@@ -565,8 +612,11 @@ func (m *Model) setFocus(pane focusPane) {
 func (m *Model) activateProjectSelection() tea.Cmd {
 	m.agents.selectedAgent = ""
 	m.agents.cursor = 0
+	m.agents.setAgents(nil)
+	m.events.setEvents(nil, 0, 0)
 	m.syncSessionPane()
-	return m.loadDataCmd()
+	m.syncDetailFromEvent()
+	return m.loadSelectedSessionDataCmd()
 }
 
 func (m *Model) selectedAgentLabel() string {
@@ -587,7 +637,7 @@ func (m *Model) selectedAgentLabel() string {
 
 func (m *Model) applyAgentSelection() tea.Cmd {
 	m.filter.setAgentLabel(m.selectedAgentLabel())
-	return m.loadDataCmd()
+	return m.loadSelectedSessionDataCmd()
 }
 
 func (m *Model) selectEventAt(index int) {
@@ -608,31 +658,54 @@ func (m *Model) syncEventSelectionAndMaybeLoadOlder() tea.Cmd {
 	return nil
 }
 
-func (m *Model) applyData(d dataMsg) {
-	m.allProjects = d.projects
-	m.allSessions = d.sessions
-	m.projects.setData(d.projects, d.sessions)
-	m.agents.setAgents(d.agents)
-
-	// auto-expand project of the first session if nothing selected
-	if m.projects.selectedSession == "" && len(d.sessions) > 0 {
-		m.projects.selectedSession = d.sessions[0].ID
-		m.projects.expandedProjs[d.sessions[0].ProjectID] = true
-		m.projects.rebuildItems()
-	}
-
+func (m *Model) applyProjects(projects []model.Project) {
+	m.allProjects = projects
+	m.projects.setData(m.allProjects, m.allSessions)
 	m.syncSessionPane()
+	m.status = fmt.Sprintf("P:%d S:%d E:%d/%d A:%d",
+		len(m.allProjects), len(m.allSessions), len(m.events.events), m.events.rawCount, len(m.agents.agents))
+}
+
+func (m *Model) applyProjectSessions(projectID int64, sessions []model.Session) {
+	m.allSessions = replaceProjectSessions(m.allSessions, projectID, sessions)
+	m.projects.setData(m.allProjects, m.allSessions)
+	if selected := m.projects.currentSessionID(); selected != "" && !sessionExists(m.allSessions, selected) {
+		m.projects.selectedSession = ""
+		m.agents.setAgents(nil)
+		m.events.setEvents(nil, 0, 0)
+		m.syncDetailFromEvent()
+	}
+	m.syncSessionPane()
+	m.status = fmt.Sprintf("P:%d S:%d E:%d/%d A:%d",
+		len(m.allProjects), len(m.allSessions), len(m.events.events), m.events.rawCount, len(m.agents.agents))
+}
+
+func (m *Model) applySessionData(d sessionDataMsg) {
+	m.agents.setAgents(d.agents)
 	m.events.setEvents(d.events, d.rawCount, d.offset)
 	m.syncDetailFromEvent()
-
-	agentLabel := "all"
-	if id := m.agents.selectedAgentID(); id != "" {
-		agentLabel = shortID(id)
-	}
-	m.filter.setAgentLabel(agentLabel)
-
 	m.status = fmt.Sprintf("P:%d S:%d E:%d/%d A:%d",
-		len(d.projects), len(d.sessions), len(d.events), d.rawCount, len(d.agents))
+		len(m.allProjects), len(m.allSessions), len(d.events), d.rawCount, len(d.agents))
+}
+
+func replaceProjectSessions(existing []model.Session, projectID int64, sessions []model.Session) []model.Session {
+	out := make([]model.Session, 0, len(existing)+len(sessions))
+	for _, session := range existing {
+		if session.ProjectID != projectID {
+			out = append(out, session)
+		}
+	}
+	out = append(out, sessions...)
+	return out
+}
+
+func sessionExists(sessions []model.Session, sessionID string) bool {
+	for _, session := range sessions {
+		if session.ID == sessionID {
+			return true
+		}
+	}
+	return false
 }
 
 func (m *Model) reportError(context string, err error) {
@@ -695,7 +768,10 @@ func (m Model) handleDelete() (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.projects.selectedSession = ""
+		m.agents.setAgents(nil)
+		m.events.setEvents(nil, 0, 0)
 		m.syncSessionPane()
+		m.syncDetailFromEvent()
 		m.status = "Session deleted"
 	case "project":
 		if err := m.store.WithTx(ctx, func(q *store.Queries) error {
@@ -705,10 +781,13 @@ func (m Model) handleDelete() (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.projects.selectedSession = ""
+		m.agents.setAgents(nil)
+		m.events.setEvents(nil, 0, 0)
 		m.syncSessionPane()
+		m.syncDetailFromEvent()
 		m.status = "Project deleted"
 	}
-	return m, m.loadDataCmd()
+	return m, m.refreshVisibleDataCmd()
 }
 
 func (m Model) handleClearEvents() (tea.Model, tea.Cmd) {
@@ -724,7 +803,7 @@ func (m Model) handleClearEvents() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.status = "Events cleared"
-	return m, m.loadDataCmd()
+	return m, m.loadSelectedSessionDataCmd()
 }
 
 type paneSizes struct {
@@ -852,9 +931,49 @@ func (m Model) View() tea.View {
 	return v
 }
 
-func (m Model) loadDataCmd() tea.Cmd {
+func (m Model) loadProjectsCmd() tea.Cmd {
 	st := m.store
+	if st == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		ctx := context.Background()
+		projects, err := st.Read().ListProjects(ctx)
+		if err != nil {
+			return projectsMsg{err: err}
+		}
+		return projectsMsg{projects: projects}
+	}
+}
+
+func (m Model) loadProjectSessionsCmd(projectID int64) tea.Cmd {
+	st := m.store
+	if st == nil || projectID == 0 {
+		return nil
+	}
+	return func() tea.Msg {
+		ctx := context.Background()
+		sessions, err := st.Read().ListSessionsForProject(ctx, projectID)
+		if err != nil {
+			return projectSessionsMsg{projectID: projectID, err: err}
+		}
+		return projectSessionsMsg{projectID: projectID, sessions: sessions}
+	}
+}
+
+func (m Model) loadSelectedSessionDataCmd() tea.Cmd {
 	sessionID := m.projects.currentSessionID()
+	if sessionID == "" {
+		return nil
+	}
+	return m.loadSessionDataCmd(sessionID)
+}
+
+func (m Model) loadSessionDataCmd(sessionID string) tea.Cmd {
+	st := m.store
+	if st == nil || sessionID == "" {
+		return nil
+	}
 	baseFilter := m.currentEventFilter()
 	// Preserve the number of already-loaded events on refresh so pagination
 	// progress is not lost when the periodic tick reloads data.
@@ -862,74 +981,76 @@ func (m Model) loadDataCmd() tea.Cmd {
 
 	return func() tea.Msg {
 		ctx := context.Background()
+		q := st.Read()
 
+		agents, err := q.ListAgentsForSessionTree(ctx, sessionID)
+		if err != nil {
+			return sessionDataMsg{sessionID: sessionID, err: err}
+		}
+
+		rawCount, err := q.CountEventsForSessionTree(ctx, sessionID)
+		if err != nil {
+			return sessionDataMsg{sessionID: sessionID, err: err}
+		}
+
+		// When filters are active the SQL OFFSET must be relative to the
+		// filtered result set, not the total event count. Use a filtered
+		// count so pagination and needsOlder() work correctly.
+		filteredCount := rawCount
+		if eventFilterActive(baseFilter) {
+			filteredCount, err = q.CountFilteredEventsForSessionTree(ctx, sessionID, baseFilter)
+			if err != nil {
+				return sessionDataMsg{sessionID: sessionID, err: err}
+			}
+		}
+
+		// Load from the end so the user sees the latest events first.
+		// On refresh, preserve the number of already-loaded events.
+		pageLimit, offset := currentRefreshEventWindow(filteredCount, loadedCount)
+		filter := baseFilter
+		filter.Limit = pageLimit
+		filter.Offset = offset
+		events, err := q.ListEventsForSessionTree(ctx, sessionID, filter)
+		if err != nil {
+			return sessionDataMsg{sessionID: sessionID, err: err}
+		}
+
+		return sessionDataMsg{
+			sessionID: sessionID,
+			agents:    agents,
+			events:    events,
+			rawCount:  rawCount,
+			offset:    offset,
+		}
+	}
+}
+
+func (m Model) refreshVisibleDataCmd() tea.Cmd {
+	cmds := []tea.Cmd{m.runMaintenanceCmd(), m.loadProjectsCmd()}
+	for projectID := range m.projects.expandedProjs {
+		if m.projects.expandedProjs[projectID] {
+			cmds = append(cmds, m.loadProjectSessionsCmd(projectID))
+		}
+	}
+	if cmd := m.loadSelectedSessionDataCmd(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+	return tea.Batch(cmds...)
+}
+
+func (m Model) runMaintenanceCmd() tea.Cmd {
+	st := m.store
+	if st == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		ctx := context.Background()
 		// Auto-stop sessions that have been idle for over 5 minutes
 		// with no active child sessions. Handles ungraceful shutdowns.
 		if _, err := st.ReapStaleSessions(ctx, 5*60*1000); err != nil {
-			return dataMsg{err: err}
+			return maintenanceMsg{err: err}
 		}
-
-		q := st.Read()
-
-		projects, err := q.ListProjects(ctx)
-		if err != nil {
-			return dataMsg{err: err}
-		}
-
-		sessions, err := q.ListRecentSessions(ctx, 200)
-		if err != nil {
-			return dataMsg{err: err}
-		}
-
-		var agents []model.Agent
-		var events []model.Event
-		rawCount := 0
-		eventsOffset := 0
-
-		if sessionID != "" {
-			agents, err = q.ListAgentsForSessionTree(ctx, sessionID)
-			if err != nil {
-				return dataMsg{err: err}
-			}
-
-			rawCount, err = q.CountEventsForSessionTree(ctx, sessionID)
-			if err != nil {
-				return dataMsg{err: err}
-			}
-
-			// When filters are active the SQL OFFSET must be relative to the
-			// filtered result set, not the total event count. Use a filtered
-			// count so pagination and needsOlder() work correctly.
-			hasFilter := eventFilterActive(baseFilter)
-			filteredCount := rawCount
-			if hasFilter {
-				filteredCount, err = q.CountFilteredEventsForSessionTree(ctx, sessionID, baseFilter)
-				if err != nil {
-					return dataMsg{err: err}
-				}
-			}
-
-			// Load from the end so the user sees the latest events first.
-			// On refresh, preserve the number of already-loaded events.
-			pageLimit, offset := currentRefreshEventWindow(filteredCount, loadedCount)
-			eventsOffset = offset
-			filter := baseFilter
-			filter.Limit = pageLimit
-			filter.Offset = eventsOffset
-			events, err = q.ListEventsForSessionTree(ctx, sessionID, filter)
-			if err != nil {
-				return dataMsg{err: err}
-			}
-		}
-
-		return dataMsg{
-			projects: projects,
-			sessions: sessions,
-			agents:   agents,
-			events:   events,
-			rawCount: rawCount,
-			offset:   eventsOffset,
-		}
+		return maintenanceMsg{}
 	}
 }
 

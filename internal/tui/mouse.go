@@ -28,8 +28,12 @@ func (m Model) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 			idx := m.projects.scroll + row
 			if idx < len(m.projects.items) {
 				m.projects.cursor = idx
+				item := m.projects.currentItem()
 				if m.projects.enter() {
 					return m, m.activateProjectSelection()
+				}
+				if item != nil && item.kind == "project" && m.projects.expandedProjs[item.projectID] {
+					return m, m.loadProjectSessionsCmd(item.projectID)
 				}
 			}
 		}
