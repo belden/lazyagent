@@ -1,6 +1,6 @@
 {
   "name": "@chojs23/lazyagent",
-  "version": "0.3.0",
+  "version": "0.5.2",
   "description": "Observe your AI agents and sessions from the terminal",
   "bin": {
     "lazyagent": "bin/lazyagent.js"
