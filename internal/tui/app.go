@@ -90,8 +90,9 @@ type Model struct {
 	allProjects []model.Project
 	allSessions []model.Session
 
-	startupGitRoot  string
-	defaultsApplied bool
+	startupGitRoot   string
+	defaultsApplied  bool
+	startupProjectID int64
 }
 
 func Run(st *store.Store, refreshInterval time.Duration) error {
@@ -189,7 +190,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.lastError = nil
 		m.applyProjectSessions(msg.projectID, msg.sessions)
-		return m, nil
+		return m, m.maybeAutoSelectActiveSession(msg.projectID)
 
 	case sessionDataMsg:
 		if msg.err != nil {
@@ -783,6 +784,7 @@ func (m *Model) applyStartupDefaults() tea.Cmd {
 	if !ok {
 		return nil
 	}
+	m.startupProjectID = projectID
 	m.projects.expandedProjs[projectID] = true
 	m.projects.rebuildItems()
 	if idx := m.projects.indexOfProject(projectID); idx >= 0 {
@@ -807,6 +809,38 @@ func (m *Model) matchStartupProject() (int64, bool) {
 		}
 	}
 	return 0, false
+}
+
+// maybeAutoSelectActiveSession picks the most-recently-active session
+// for the startup-matched project, if any. Runs only for the matching
+// projectID and only when no session has been selected yet.
+func (m *Model) maybeAutoSelectActiveSession(projectID int64) tea.Cmd {
+	if m.startupProjectID == 0 || m.startupProjectID != projectID {
+		return nil
+	}
+	if m.projects.selectedSession != "" {
+		return nil
+	}
+	var best *model.Session
+	for i := range m.allSessions {
+		sess := &m.allSessions[i]
+		if sess.ProjectID != projectID || sess.Status != "active" {
+			continue
+		}
+		if best == nil || sess.LastActivity > best.LastActivity {
+			best = sess
+		}
+	}
+	if best == nil {
+		return nil
+	}
+	m.projects.selectedSession = best.ID
+	m.projects.rebuildItems()
+	if idx := m.projects.indexOfSession(best.ID); idx >= 0 {
+		m.projects.cursor = idx
+	}
+	m.syncSessionPane()
+	return m.loadSelectedSessionDataCmd()
 }
 
 func (m *Model) applyProjectSessions(projectID int64, sessions []model.Session) {

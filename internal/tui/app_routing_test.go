@@ -738,3 +738,124 @@ func TestApplyStartupDefaults_DoesNotReapplyOnSecondProjectsMsg(t *testing.T) {
 		t.Fatal("refresh tick re-expanded the project; defaults should latch")
 	}
 }
+
+func TestAutoSelectActiveSession_PicksMostRecentActive(t *testing.T) {
+	st := testRoutingTUIStore(t)
+	ctx := t.Context()
+	var projectID int64
+	if err := st.WithTx(ctx, func(q *store.Queries) error {
+		var err error
+		projectID, err = q.CreateProject(ctx, "alpha", "Alpha", "/tmp/alpha", "")
+		if err != nil {
+			return err
+		}
+		// Stopped session (most recent overall) — should be skipped.
+		if err := q.UpsertSession(ctx, "stopped-recent", "", projectID, "stopped", "claude", nil, 3000, ""); err != nil {
+			return err
+		}
+		if err := q.UpdateSessionStatus(ctx, "stopped-recent", "stopped"); err != nil {
+			return err
+		}
+		// Older active.
+		if err := q.UpsertSession(ctx, "active-old", "", projectID, "old", "claude", nil, 1000, ""); err != nil {
+			return err
+		}
+		// Newer active — should win.
+		return q.UpsertSession(ctx, "active-new", "", projectID, "new", "claude", nil, 2000, "")
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	m := newModelWithGitRoot(st, time.Second, "/tmp/alpha")
+	updated, cmd := m.Update(m.loadProjectsCmd()())
+	m = updated.(Model)
+	if cmd == nil {
+		t.Fatal("expected sessions-load cmd")
+	}
+	updated, cmd = m.Update(cmd())
+	m = updated.(Model)
+
+	if m.projects.selectedSession != "active-new" {
+		t.Fatalf("selectedSession = %q, want active-new", m.projects.selectedSession)
+	}
+	if cmd == nil {
+		t.Fatal("expected session-data load cmd after auto-selecting session")
+	}
+	item := m.projects.currentItem()
+	if item == nil || item.kind != "session" || item.sessionID != "active-new" {
+		t.Fatalf("cursor not on selected session: %+v", item)
+	}
+}
+
+func TestAutoSelectActiveSession_NoActiveLeavesSelectionEmpty(t *testing.T) {
+	st := testRoutingTUIStore(t)
+	ctx := t.Context()
+	var projectID int64
+	if err := st.WithTx(ctx, func(q *store.Queries) error {
+		var err error
+		projectID, err = q.CreateProject(ctx, "alpha", "Alpha", "/tmp/alpha", "")
+		if err != nil {
+			return err
+		}
+		if err := q.UpsertSession(ctx, "sess-1", "", projectID, "s", "claude", nil, 1000, ""); err != nil {
+			return err
+		}
+		return q.UpdateSessionStatus(ctx, "sess-1", "stopped")
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	m := newModelWithGitRoot(st, time.Second, "/tmp/alpha")
+	updated, cmd := m.Update(m.loadProjectsCmd()())
+	m = updated.(Model)
+	updated, _ = m.Update(cmd())
+	m = updated.(Model)
+
+	if m.projects.selectedSession != "" {
+		t.Fatalf("selectedSession = %q, want empty", m.projects.selectedSession)
+	}
+	item := m.projects.currentItem()
+	if item == nil || item.kind != "project" || item.projectID != projectID {
+		t.Fatalf("cursor not on project: %+v", item)
+	}
+}
+
+func TestAutoSelectActiveSession_IgnoredForOtherProjects(t *testing.T) {
+	st := testRoutingTUIStore(t)
+	ctx := t.Context()
+	var projectA int64
+	if err := st.WithTx(ctx, func(q *store.Queries) error {
+		var err error
+		projectA, err = q.CreateProject(ctx, "alpha", "Alpha", "/tmp/alpha", "")
+		if err != nil {
+			return err
+		}
+		projectB, err := q.CreateProject(ctx, "beta", "Beta", "/tmp/beta", "")
+		if err != nil {
+			return err
+		}
+		return q.UpsertSession(ctx, "b-sess", "", projectB, "b", "claude", nil, 1000, "")
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	m := newModelWithGitRoot(st, time.Second, "/tmp/alpha")
+	updated, cmd := m.Update(m.loadProjectsCmd()())
+	m = updated.(Model)
+
+	updated, _ = m.Update(projectSessionsMsg{
+		projectID: projectA + 999,
+		sessions:  []model.Session{{ID: "b-sess", ProjectID: projectA + 999, Status: "active", LastActivity: 5000}},
+	})
+	m = updated.(Model)
+
+	if m.projects.selectedSession != "" {
+		t.Fatalf("selectedSession = %q for unrelated project, want empty",
+			m.projects.selectedSession)
+	}
+
+	if cmd != nil {
+		updated, _ = m.Update(cmd())
+		m = updated.(Model)
+	}
+}
