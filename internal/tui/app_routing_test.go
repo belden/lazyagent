@@ -854,3 +854,49 @@ func TestAutoSelectActiveSession_IgnoredForOtherProjects(t *testing.T) {
 			m.projects.selectedSession)
 	}
 }
+
+func TestStartupDefaults_EndToEnd(t *testing.T) {
+	st := testRoutingTUIStore(t)
+	ctx := t.Context()
+	var projectID int64
+	if err := st.WithTx(ctx, func(q *store.Queries) error {
+		var err error
+		projectID, err = q.CreateProject(ctx, "alpha", "Alpha", "/tmp/alpha", "")
+		if err != nil {
+			return err
+		}
+		if err := q.UpsertSession(ctx, "sess-active", "", projectID, "a", "claude", nil, 1000, ""); err != nil {
+			return err
+		}
+		return q.UpsertAgent(ctx, "agent-1", "sess-active", "", "main", "", "main", "")
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	m := newModelWithGitRoot(st, time.Second, "/tmp/alpha")
+
+	// 1) projectsMsg -> expand + load sessions
+	updated, cmd := m.Update(m.loadProjectsCmd()())
+	m = updated.(Model)
+	if cmd == nil {
+		t.Fatal("step 1 expected a session-load cmd")
+	}
+
+	// 2) projectSessionsMsg -> pick active session + load session data
+	updated, cmd = m.Update(cmd())
+	m = updated.(Model)
+	if m.projects.selectedSession != "sess-active" {
+		t.Fatalf("selectedSession = %q, want sess-active",
+			m.projects.selectedSession)
+	}
+	if cmd == nil {
+		t.Fatal("step 2 expected a session-data load cmd")
+	}
+
+	// 3) sessionDataMsg -> events/agents apply
+	updated, _ = m.Update(cmd())
+	m = updated.(Model)
+	if len(m.agents.agents) == 0 {
+		t.Fatal("agents not loaded after end-to-end auto-selection")
+	}
+}
