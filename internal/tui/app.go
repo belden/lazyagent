@@ -775,7 +775,7 @@ func (m *Model) applyProjects(projects []model.Project) {
 // project is expanded and the cursor moves to its row. Returns a
 // command to load that project's sessions, or nil.
 func (m *Model) applyStartupDefaults() tea.Cmd {
-	if m.defaultsApplied || m.startupGitRoot == "" {
+	if m.defaultsApplied || m.startupGitRoot == "" || len(m.allProjects) == 0 {
 		return nil
 	}
 	m.defaultsApplied = true

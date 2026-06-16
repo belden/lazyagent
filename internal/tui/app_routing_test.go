@@ -900,3 +900,43 @@ func TestStartupDefaults_EndToEnd(t *testing.T) {
 		t.Fatal("agents not loaded after end-to-end auto-selection")
 	}
 }
+
+func TestApplyStartupDefaults_EmptyProjectsDoesNotLatch(t *testing.T) {
+	st := testRoutingTUIStore(t)
+	ctx := t.Context()
+
+	// First tick: no projects in DB yet.
+	m := newModelWithGitRoot(st, time.Second, "/tmp/alpha")
+	updated, cmd := m.Update(m.loadProjectsCmd()())
+	m = updated.(Model)
+
+	if m.defaultsApplied {
+		t.Fatal("defaultsApplied should not latch when allProjects is empty")
+	}
+	if cmd != nil {
+		t.Fatal("no session-load cmd expected when no projects exist yet")
+	}
+
+	// Project appears between ticks; the next projectsMsg should auto-apply.
+	var projectID int64
+	if err := st.WithTx(ctx, func(q *store.Queries) error {
+		var err error
+		projectID, err = q.CreateProject(ctx, "alpha", "Alpha", "/tmp/alpha", "")
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	updated, cmd = m.Update(m.loadProjectsCmd()())
+	m = updated.(Model)
+
+	if !m.defaultsApplied {
+		t.Fatal("defaultsApplied should latch on first non-empty projectsMsg")
+	}
+	if !m.projects.expandedProjs[projectID] {
+		t.Fatalf("project %d should be expanded after late-arriving projectsMsg", projectID)
+	}
+	if cmd == nil {
+		t.Fatal("expected session-load cmd on late-arriving projectsMsg")
+	}
+}
