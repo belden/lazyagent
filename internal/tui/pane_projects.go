@@ -150,6 +150,26 @@ func (p *projectsModel) currentItem() *sidebarItem {
 	return nil
 }
 
+// indexOfProject returns the items index of a project's row, or -1.
+func (p *projectsModel) indexOfProject(projectID int64) int {
+	for i, item := range p.items {
+		if item.kind == "project" && item.projectID == projectID {
+			return i
+		}
+	}
+	return -1
+}
+
+// indexOfSession returns the items index of a session's row, or -1.
+func (p *projectsModel) indexOfSession(sessionID string) int {
+	for i, item := range p.items {
+		if item.kind == "session" && item.sessionID == sessionID {
+			return i
+		}
+	}
+	return -1
+}
+
 func (p *projectsModel) tick() {
 	p.spinnerFrame = (p.spinnerFrame + 1) % len(spinnerFrames)
 }

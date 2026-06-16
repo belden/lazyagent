@@ -180,7 +180,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.lastError = nil
 		m.applyProjects(msg.projects)
-		return m, nil
+		return m, m.applyStartupDefaults()
 
 	case projectSessionsMsg:
 		if msg.err != nil {
@@ -767,6 +767,46 @@ func (m *Model) applyProjects(projects []model.Project) {
 		m.status = fmt.Sprintf("P:%d S:%d E:%d/%d A:%d",
 			len(m.allProjects), len(m.allSessions), len(m.events.events), m.events.rawCount, len(m.agents.agents))
 	}
+}
+
+// applyStartupDefaults runs once after the first projectsMsg. If the
+// current working directory's git root matches a known project, the
+// project is expanded and the cursor moves to its row. Returns a
+// command to load that project's sessions, or nil.
+func (m *Model) applyStartupDefaults() tea.Cmd {
+	if m.defaultsApplied || m.startupGitRoot == "" {
+		return nil
+	}
+	m.defaultsApplied = true
+
+	projectID, ok := m.matchStartupProject()
+	if !ok {
+		return nil
+	}
+	m.projects.expandedProjs[projectID] = true
+	m.projects.rebuildItems()
+	if idx := m.projects.indexOfProject(projectID); idx >= 0 {
+		m.projects.cursor = idx
+	}
+	return m.loadProjectSessionsCmd(projectID)
+}
+
+// matchStartupProject returns the ID of the project whose Directory
+// matches startupGitRoot, normalizing symlinks where possible.
+func (m *Model) matchStartupProject() (int64, bool) {
+	want := m.startupGitRoot
+	for _, proj := range m.allProjects {
+		if proj.Directory == "" {
+			continue
+		}
+		if proj.Directory == want {
+			return proj.ID, true
+		}
+		if resolved, err := filepath.EvalSymlinks(proj.Directory); err == nil && resolved == want {
+			return proj.ID, true
+		}
+	}
+	return 0, false
 }
 
 func (m *Model) applyProjectSessions(projectID int64, sessions []model.Session) {

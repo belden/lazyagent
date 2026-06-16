@@ -633,3 +633,108 @@ func TestUpdateEventsEnterStillFocusesDetail(t *testing.T) {
 		t.Fatalf("focus = %v, want %v", m.focus, focusDetail)
 	}
 }
+
+func TestApplyStartupDefaults_MatchExpandsProjectAndLoadsSessions(t *testing.T) {
+	st := testRoutingTUIStore(t)
+	ctx := t.Context()
+	var projectID int64
+	if err := st.WithTx(ctx, func(q *store.Queries) error {
+		var err error
+		projectID, err = q.CreateProject(ctx, "alpha", "Alpha", "/tmp/alpha", "")
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	m := newModelWithGitRoot(st, time.Second, "/tmp/alpha")
+	updated, cmd := m.Update(m.loadProjectsCmd()())
+	m = updated.(Model)
+
+	if !m.defaultsApplied {
+		t.Fatal("defaultsApplied should be true after first projectsMsg")
+	}
+	if !m.projects.expandedProjs[projectID] {
+		t.Fatalf("project %d not expanded", projectID)
+	}
+	item := m.projects.currentItem()
+	if item == nil || item.kind != "project" || item.projectID != projectID {
+		t.Fatalf("cursor not on matching project: %+v", item)
+	}
+	if cmd == nil {
+		t.Fatal("expected projectSessionsMsg load command")
+	}
+}
+
+func TestApplyStartupDefaults_NoMatchLeavesPaneUnselected(t *testing.T) {
+	st := testRoutingTUIStore(t)
+	ctx := t.Context()
+	if err := st.WithTx(ctx, func(q *store.Queries) error {
+		_, err := q.CreateProject(ctx, "alpha", "Alpha", "/tmp/alpha", "")
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	m := newModelWithGitRoot(st, time.Second, "/tmp/other")
+	updated, _ := m.Update(m.loadProjectsCmd()())
+	m = updated.(Model)
+
+	if !m.defaultsApplied {
+		t.Fatal("defaultsApplied should latch even on no-match")
+	}
+	if m.projects.cursor != 0 || len(m.projects.expandedProjs) != 0 {
+		t.Fatalf("unexpected pane state: cursor=%d expanded=%v",
+			m.projects.cursor, m.projects.expandedProjs)
+	}
+	if m.projects.selectedSession != "" {
+		t.Fatalf("selectedSession = %q, want empty", m.projects.selectedSession)
+	}
+}
+
+func TestApplyStartupDefaults_EmptyGitRootSkips(t *testing.T) {
+	st := testRoutingTUIStore(t)
+	ctx := t.Context()
+	if err := st.WithTx(ctx, func(q *store.Queries) error {
+		_, err := q.CreateProject(ctx, "alpha", "Alpha", "/tmp/alpha", "")
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	m := newModelWithGitRoot(st, time.Second, "")
+	updated, _ := m.Update(m.loadProjectsCmd()())
+	m = updated.(Model)
+
+	if m.defaultsApplied {
+		t.Fatal("defaultsApplied should stay false when no startup git root")
+	}
+	if len(m.projects.expandedProjs) != 0 {
+		t.Fatalf("expanded = %v, want empty", m.projects.expandedProjs)
+	}
+}
+
+func TestApplyStartupDefaults_DoesNotReapplyOnSecondProjectsMsg(t *testing.T) {
+	st := testRoutingTUIStore(t)
+	ctx := t.Context()
+	var projectID int64
+	if err := st.WithTx(ctx, func(q *store.Queries) error {
+		var err error
+		projectID, err = q.CreateProject(ctx, "alpha", "Alpha", "/tmp/alpha", "")
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	m := newModelWithGitRoot(st, time.Second, "/tmp/alpha")
+	updated, _ := m.Update(m.loadProjectsCmd()())
+	m = updated.(Model)
+
+	m.projects.expandedProjs[projectID] = false
+
+	updated, _ = m.Update(m.loadProjectsCmd()())
+	m = updated.(Model)
+
+	if m.projects.expandedProjs[projectID] {
+		t.Fatal("refresh tick re-expanded the project; defaults should latch")
+	}
+}
