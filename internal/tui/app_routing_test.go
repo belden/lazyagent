@@ -840,7 +840,7 @@ func TestAutoSelectActiveSession_IgnoredForOtherProjects(t *testing.T) {
 	}
 
 	m := newModelWithGitRoot(st, time.Second, "/tmp/alpha")
-	updated, cmd := m.Update(m.loadProjectsCmd()())
+	updated, _ := m.Update(m.loadProjectsCmd()())
 	m = updated.(Model)
 
 	updated, _ = m.Update(projectSessionsMsg{
@@ -852,10 +852,5 @@ func TestAutoSelectActiveSession_IgnoredForOtherProjects(t *testing.T) {
 	if m.projects.selectedSession != "" {
 		t.Fatalf("selectedSession = %q for unrelated project, want empty",
 			m.projects.selectedSession)
-	}
-
-	if cmd != nil {
-		updated, _ = m.Update(cmd())
-		m = updated.(Model)
 	}
 }

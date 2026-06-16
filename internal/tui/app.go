@@ -812,8 +812,12 @@ func (m *Model) matchStartupProject() (int64, bool) {
 }
 
 // maybeAutoSelectActiveSession picks the most-recently-active session
-// for the startup-matched project, if any. Runs only for the matching
-// projectID and only when no session has been selected yet.
+// for the startup-matched project, if any. It runs only for the
+// matching projectID and only when no session is currently selected.
+// The latter check means the helper also runs after the user clears
+// their selection (e.g., session deletion) — by design, we always
+// land on the most-recently-active session for this project when
+// none is selected.
 func (m *Model) maybeAutoSelectActiveSession(projectID int64) tea.Cmd {
 	if m.startupProjectID == 0 || m.startupProjectID != projectID {
 		return nil
