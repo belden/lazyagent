@@ -3,6 +3,8 @@ package tui
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	"charm.land/bubbles/v2/help"
@@ -87,15 +89,40 @@ type Model struct {
 
 	allProjects []model.Project
 	allSessions []model.Session
+
+	startupGitRoot  string
+	defaultsApplied bool
 }
 
 func Run(st *store.Store, refreshInterval time.Duration) error {
-	p := tea.NewProgram(newModel(st, refreshInterval))
+	gitRoot := resolveStartupGitRoot()
+	p := tea.NewProgram(newModelWithGitRoot(st, refreshInterval, gitRoot))
 	_, err := p.Run()
 	return err
 }
 
+// resolveStartupGitRoot returns the symlink-resolved git root of the
+// process working directory, or "" if there isn't one.
+func resolveStartupGitRoot() string {
+	cwd, err := os.Getwd()
+	if err != nil || cwd == "" {
+		return ""
+	}
+	root, ok := findGitRoot(cwd)
+	if !ok {
+		return ""
+	}
+	if resolved, err := filepath.EvalSymlinks(root); err == nil {
+		return resolved
+	}
+	return root
+}
+
 func newModel(st *store.Store, refreshInterval time.Duration) Model {
+	return newModelWithGitRoot(st, refreshInterval, "")
+}
+
+func newModelWithGitRoot(st *store.Store, refreshInterval time.Duration, gitRoot string) Model {
 	m := Model{
 		store:           st,
 		refreshInterval: refreshInterval,
@@ -111,6 +138,7 @@ func newModel(st *store.Store, refreshInterval time.Duration) Model {
 		status:          "Loading...",
 		debug:           &debugOverlay{},
 		export:          newExportPopup(),
+		startupGitRoot:  gitRoot,
 	}
 	setGlobalDebug(m.debug)
 	return m
