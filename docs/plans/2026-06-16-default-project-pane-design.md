@@ -1,5 +1,7 @@
 # Default the Projects pane to the current directory
 
+> **Status:** Implemented on branch `feature/default-project-pane`.
+
 ## Problem
 
 When lazyagent starts, the Projects pane is focused but nothing is
